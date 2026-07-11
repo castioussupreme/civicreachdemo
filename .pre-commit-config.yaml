@@ -1,0 +1,48 @@
+# Git pre-commit hooks (Husky equivalent for Python).
+# One-time:  ./setup-hooks
+default_language_version:
+  python: python3
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: debug-statements
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # Project-venv hooks (types, dead code, tests) so deps match the app.
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (types)
+        entry: bash -c 'source .venv/bin/activate && mypy --config-file=pyproject.toml'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: vulture
+        name: vulture (dead code)
+        entry: bash -c 'source .venv/bin/activate && vulture src tests --min-confidence 80'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: pytest
+        name: pytest
+        entry: bash -c 'source .venv/bin/activate && pytest -q --tb=line'
+        language: system
+        pass_filenames: false
+        always_run: true

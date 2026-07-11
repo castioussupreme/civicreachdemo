@@ -1,0 +1,6 @@
+# Happy path — multi-turn user utterances for live LLM (OPENAI_API_KEY required)
+# Run: python -m src.cli --script scripts/happy_path.txt
+Hi, I want to know if I qualify for NC FNS food assistance
+I live in North Carolina
+There are 2 people in my household who buy food together
+We make 3000 dollars a month gross total household income before taxes

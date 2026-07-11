@@ -1,0 +1,66 @@
+{
+  "corpus_version": "2025-10-nc-fns-v1",
+  "description": "Curated public excerpts for NC FNS (SNAP) screening POC. Not an official DSS knowledge base.",
+  "sources": [
+    {
+      "id": "nc-fns-overview",
+      "title": "NC Food and Nutrition Services overview",
+      "file": "nc-fns-overview.md",
+      "url": "https://www.ncdhhs.gov/divisions/child-and-family-well-being/food-and-nutrition-services-food-stamps",
+      "publisher": "NCDHHS",
+      "effective_from": null,
+      "effective_to": null,
+      "notes": "Program overview and high-level eligibility factors."
+    },
+    {
+      "id": "nc-fns-income-limits",
+      "title": "NC SNAP/FNS gross monthly income limits (FY 2026)",
+      "file": "nc-fns-income-limits.md",
+      "url": "https://morefood.org/using-snap/am-i-eligible/",
+      "publisher": "More In My Basket (NC State / USDA-funded outreach)",
+      "effective_from": "2025-10-01",
+      "effective_to": "2026-09-30",
+      "notes": "Public screening table labeled Maximum Gross Monthly Income (200%). Some households may face a 130% test determined by DSS."
+    },
+    {
+      "id": "nc-fns-general-requirements",
+      "title": "General FNS requirements (residency, income, status)",
+      "file": "nc-fns-general-requirements.md",
+      "url": "https://morefood.org/using-snap/am-i-eligible/",
+      "publisher": "More In My Basket",
+      "effective_from": "2025-10-01",
+      "effective_to": "2026-09-30",
+      "notes": "Simplified general requirements for screening only."
+    },
+    {
+      "id": "nc-fns-student-rules",
+      "title": "College student SNAP/FNS exemptions (summary)",
+      "file": "nc-fns-student-rules.md",
+      "url": "https://morefood.org/using-snap/am-i-eligible/",
+      "publisher": "More In My Basket / USDA FNS",
+      "effective_from": null,
+      "effective_to": null,
+      "notes": "Student rules are complex; POC flags students and notes need for DSS review."
+    },
+    {
+      "id": "nc-fns-how-to-apply",
+      "title": "How to apply for NC FNS (public pointers only)",
+      "file": "nc-fns-how-to-apply.md",
+      "url": "https://www.ncdhhs.gov/divisions/child-and-family-well-being/food-and-nutrition-services-food-stamps",
+      "publisher": "NCDHHS",
+      "effective_from": null,
+      "effective_to": null,
+      "notes": "Static application pointers. Agent never submits applications."
+    },
+    {
+      "id": "agent-disclaimer",
+      "title": "Screening disclaimer and scope",
+      "file": "agent-disclaimer.md",
+      "url": null,
+      "publisher": "This POC",
+      "effective_from": null,
+      "effective_to": null,
+      "notes": "Agent-owned disclaimer text."
+    }
+  ]
+}

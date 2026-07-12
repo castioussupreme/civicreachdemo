@@ -10,7 +10,10 @@ from src.state.models import Assessment, AssessmentStatus
 def _assessment(**kwargs: object) -> Assessment:
     base = {
         "status": AssessmentStatus.LIKELY_ELIGIBLE,
-        "reasons": ["Income under threshold."],
+        "reasons": [
+            "Normalized gross monthly income $3,000.00 is at or below "
+            "the public screening threshold $3,526.00 for a household of 2."
+        ],
         "rule_version": "nc-fns-screening-2025-10",
         "source_ids": ["nc-fns-income-limits"],
         "threshold_used": 3526.0,
@@ -22,13 +25,22 @@ def _assessment(**kwargs: object) -> Assessment:
     return Assessment(**base)  # type: ignore[arg-type]
 
 
-def test_format_assessment_card_includes_math() -> None:
+def test_format_assessment_card_is_user_friendly() -> None:
     card = format_assessment_card(_assessment())
     assert "Likely eligible" in card
-    assert "$3,000.00" in card
-    assert "$3,526.00" in card
-    assert "Household size: 2" in card
-    assert "Income under threshold" in card
+    assert "(screening)" not in card
+    assert "code-owned" not in card.lower()
+    assert "Ruleset" not in card
+    assert "nc-fns-screening" not in card
+    assert "What we used for this screen" in card
+    assert "Household size: 2 people" in card
+    assert "Monthly income used: $3,000" in card
+    assert "Public income limit: $3,526" in card
+    assert "Your estimated monthly income" in card
+    assert "public income limit" in card
+    assert "Normalized gross" not in card
+    assert "Informal screen only" in card
+    assert "County DSS decides" in card
 
 
 def test_format_assessment_card_with_citations() -> None:
@@ -42,7 +54,7 @@ def test_format_assessment_card_with_citations() -> None:
     ]
     card = format_assessment_card(_assessment(), citations=cites)
     assert "Sources:" in card
-    assert "nc-fns-income-limits" in card
+    assert "Income limits" in card or "nc-fns-income-limits" in card
 
 
 def test_should_show_card_only_for_terminal() -> None:

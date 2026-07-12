@@ -97,7 +97,7 @@ def _print_assistant(
         console.print(
             Panel(
                 format_assessment_card(assessment),
-                title="Screening summary (code-owned)",
+                title="Screening summary",
                 border_style="cyan",
             )
         )
@@ -118,7 +118,7 @@ def _print_why(api: AgentApiClient, session_id: str) -> None:
     console.print(
         Panel(
             format_assessment_card(assessment),
-            title="/why — last screening summary",
+            title="Last screening summary",
             border_style="cyan",
         )
     )

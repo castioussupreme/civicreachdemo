@@ -37,6 +37,8 @@ Rules:
 - "I make about $2,500" without period -> income_amount 2500, income_period null, confidence lower.
 - Do not extract SSN or addresses.
 - confirm_field/confirm_value only if user is resolving a prior contradiction.
+- Use recent_conversation only to interpret short answers (e.g. "yes", "monthly", "the second one").
+- Prefer facts clearly stated or implied in the latest message; do not re-extract old turns as new facts.
 """
 
 
@@ -46,10 +48,17 @@ def extract_facts(
     *,
     previous_question: str | None = None,
 ) -> ExtractionResult:
+    # Last few turns for anaphora only ("yes", "the higher one") — case slots remain truth.
+    recent = [
+        {"role": t.role, "text": t.text[:400]}
+        for t in case.recent_turns[-4:]
+        if t.role == "user" or t.role == "assistant"
+    ]
     user_payload = {
         "message": message,
         "previous_question": previous_question or case.last_question,
         "current_state": case.known_summary(),
+        "recent_conversation": recent,
         "open_contradictions": [
             {
                 "field": c.field,

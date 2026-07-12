@@ -7,7 +7,11 @@ from typing import Protocol
 
 import redis
 
-from src.state.models import EligibilityCase
+from src.state.models import EligibilityCase, fresh_case
+
+# Whole case (slots + transcript + assessment) lives under one Redis key.
+# Sliding TTL: every write refreshes expiry. Idle sessions vanish entirely.
+SESSION_TTL_SECONDS = 60 * 60 * 24  # 24 hours
 
 
 class SessionStoreProtocol(Protocol):
@@ -21,22 +25,28 @@ class SessionStoreProtocol(Protocol):
 
 
 class SessionStore:
-    """Persist cases in Redis (JSON, TTL)."""
+    """
+    Persist cases in Redis as JSON with a sliding TTL.
 
-    def __init__(self, redis_url: str) -> None:
+    Expiry deletes conversation history and structured case data together
+    (single key `fns:case:{id}`). After expiry, get() starts a fresh case.
+    """
+
+    def __init__(self, redis_url: str, *, ttl_seconds: int = SESSION_TTL_SECONDS) -> None:
         self._client = redis.Redis.from_url(redis_url, decode_responses=True)
         self._prefix = "fns:case:"
-        self._ttl_seconds = 60 * 60 * 24  # 24h
+        self._ttl_seconds = ttl_seconds
 
     def create(self) -> str:
         sid = str(uuid.uuid4())[:8]
-        self.set(sid, EligibilityCase())
+        self.set(sid, fresh_case())
         return sid
 
     def get(self, session_id: str) -> EligibilityCase:
         raw = self._client.get(self._prefix + session_id)
         if raw is None:
-            case = EligibilityCase()
+            # Missing or expired key → new empty screening session
+            case = fresh_case()
             self.set(session_id, case)
             return case
         return EligibilityCase.model_validate_json(raw)
@@ -49,7 +59,7 @@ class SessionStore:
         )
 
     def reset(self, session_id: str) -> EligibilityCase:
-        case = EligibilityCase()
+        case = fresh_case()
         self.set(session_id, case)
         return case
 

@@ -10,27 +10,22 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from src.config import get_settings
-from src.eligibility.ruleset import RULESET
 from src.process_turn import process_turn
 from src.session import SessionStoreProtocol, open_session_store
-from src.state.models import EligibilityCase
+from src.state.models import OPENING_MESSAGE, EligibilityCase
 
 console = Console()
 
 
-WELCOME = f"""
-# NC FNS Eligibility Screening Agent (POC)
-
-Informal likelihood screen for **North Carolina Food and Nutrition Services** (SNAP).
-
-- Ruleset: `{RULESET.id}` ({RULESET.effective_from} → {RULESET.effective_to})
-- I use curated public documents + deterministic income math
-- I **cannot** submit applications or contact DSS
-- Please **do not** share SSN or full street address
-- Sessions are stored in **Redis** (start the Compose stack so Redis is available)
-
-Commands: `/quit` `/reset` `/state` `/debug on|off`
+HELP = """
+[dim]Casual NC FNS (food assistance) screen — not official. No SSN needed.
+Commands: /quit  /reset  /state  /debug on|off[/dim]
 """
+
+
+def _print_assistant(text: str) -> None:
+    console.print()
+    console.print(Panel(Markdown(text), title="Assistant", border_style="green"))
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -38,7 +33,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Show extraction/plan debug after each turn",
+        help="Show stage / extraction / plan metadata after each turn",
     )
     parser.add_argument(
         "--script",
@@ -70,11 +65,16 @@ def main(argv: list[str] | None = None) -> None:
 
     debug = args.debug
 
-    console.print(Markdown(WELCOME))
-    console.print(
-        f"[dim]Session {sid} · model: {settings.openai_model} · "
-        f"redis: {settings.public_redis_url}[/dim]\n"
-    )
+    console.print(HELP)
+    if debug:
+        console.print(
+            f"[dim]session={sid} model={settings.openai_model} "
+            f"redis={settings.public_redis_url}[/dim]"
+        )
+
+    # Opening line is part of the conversation (also stored on the case).
+    opening = case.recent_turns[0].text if case.recent_turns else OPENING_MESSAGE
+    _print_assistant(opening)
 
     if args.script:
         _run_script(args.script, case, store, sid, debug)
@@ -84,24 +84,25 @@ def main(argv: list[str] | None = None) -> None:
         try:
             user = console.input("[bold cyan]You>[/bold cyan] ").strip()
         except (EOFError, KeyboardInterrupt):
-            console.print("\nGoodbye.")
+            console.print("\nTake care.")
             break
 
         if not user:
             continue
         if user.lower() in {"/quit", "/exit", "quit", "exit"}:
-            console.print("Goodbye.")
+            console.print("Take care.")
             break
         if user.lower() == "/reset":
             case = store.reset(sid)
-            console.print("[green]Session reset.[/green]")
+            console.print("[green]Starting fresh.[/green]")
+            _print_assistant(case.recent_turns[0].text if case.recent_turns else OPENING_MESSAGE)
             continue
         if user.lower() == "/state":
             console.print_json(json.dumps(case.known_summary(), default=str))
             continue
         if user.lower() == "/debug on":
             debug = True
-            console.print("Debug on.")
+            console.print("Debug on — stage and plan will show after each reply.")
             continue
         if user.lower() == "/debug off":
             debug = False
@@ -112,13 +113,12 @@ def main(argv: list[str] | None = None) -> None:
         case = result.case
         store.set(sid, case)
 
-        console.print()
-        console.print(Panel(Markdown(result.reply), title="Agent", border_style="green"))
+        _print_assistant(result.reply)
         if debug:
             console.print(
                 Panel(
                     json.dumps(result.debug, indent=2, default=str),
-                    title="Debug",
+                    title="Debug (not shown to end users)",
                     border_style="dim",
                 )
             )
@@ -141,12 +141,12 @@ def _run_script(
         result = process_turn(line, case)
         case = result.case
         store.set(sid, case)
-        console.print(Panel(Markdown(result.reply), title="Agent", border_style="green"))
+        _print_assistant(result.reply)
         if debug:
             console.print(
                 Panel(
                     json.dumps(result.debug, indent=2, default=str),
-                    title="Debug",
+                    title="Debug (not shown to end users)",
                     border_style="dim",
                 )
             )

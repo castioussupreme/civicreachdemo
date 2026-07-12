@@ -262,7 +262,8 @@ def test_known_summary_serializable() -> None:
         turn=1,
     )
     summary = case.known_summary()
-    assert summary["stage"] == "introduction"
+    # Facts only — no stage labels (those are debug/API metadata)
+    assert "stage" not in summary
     assert summary["lives_in_nc"]["value"] is True  # type: ignore[index]
     assert summary["household_size"]["value"] == 1  # type: ignore[index]
     assert "normalized_gross_monthly" in summary

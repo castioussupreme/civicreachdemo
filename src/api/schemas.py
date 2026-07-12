@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from src.limits import HARD_MAX_MESSAGE_CHARS
+
 
 class HealthResponse(BaseModel):
     status: str
@@ -15,10 +17,13 @@ class HealthResponse(BaseModel):
 
 class SessionCreateResponse(BaseModel):
     session_id: str
+    # First assistant line so clients can show it without an empty first turn
+    opening_message: str
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=8000)
+    # Hard ceiling only; friendly oversize handling uses Settings.max_message_chars.
+    message: str = Field(min_length=1, max_length=HARD_MAX_MESSAGE_CHARS)
     session_id: str | None = None
 
 

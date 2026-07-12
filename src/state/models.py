@@ -6,6 +6,7 @@ from typing import Generic, Literal, TypeVar
 from pydantic import BaseModel, Field
 
 from src.json_types import JsonObject, JsonValue
+from src.limits import DEFAULT_MAX_MESSAGE_CHARS
 
 T = TypeVar("T")
 
@@ -71,6 +72,32 @@ class Assessment(BaseModel):
     caveats: list[str] = Field(default_factory=list)
 
 
+class DialogueTurn(BaseModel):
+    """Transcript for wording continuity only — not eligibility truth."""
+
+    role: Literal["user", "assistant"]
+    text: str
+
+
+# Screening chats are short; 25 turns is effectively "the whole conversation"
+# for this POC while still bounding prompt size / Redis payload / re-injected text.
+MAX_RECENT_TURNS = 25
+
+OPENING_MESSAGE = (
+    "Hi — I can help with a quick check on whether you might qualify for "
+    "North Carolina food assistance (FNS/SNAP). "
+    "Can you start by telling me a little about your household and income?"
+)
+
+
+def fresh_case() -> EligibilityCase:
+    """New case with a friendly opening line already in the transcript."""
+    case = EligibilityCase()
+    case.append_turn("assistant", OPENING_MESSAGE)
+    case.last_question = OPENING_MESSAGE
+    return case
+
+
 class EligibilityCase(BaseModel):
     stage: Stage = Stage.INTRODUCTION
     turn_count: int = 0
@@ -101,9 +128,42 @@ class EligibilityCase(BaseModel):
     pii_warned: bool = False
     notes: list[str] = Field(default_factory=list)
 
+    # Wording-only chat memory (does not drive eligibility)
+    recent_turns: list[DialogueTurn] = Field(default_factory=list)
+    # Soft disclaimer already woven into an earlier assistant reply
+    disclaimer_given: bool = False
+
+    def append_turn(
+        self,
+        role: Literal["user", "assistant"],
+        text: str,
+        *,
+        max_chars: int | None = None,
+    ) -> bool:
+        """
+        Append a transcript line. Returns True if the text was truncated.
+
+        Callers must PII-redact *user* text before calling. Empty strings are ignored.
+        User input over the shared limit is rejected in process_turn (friendly reply)
+        and never passed here as a full paste. max_chars is a safety net for retention
+        (defaults to Settings / DEFAULT_MAX_MESSAGE_CHARS).
+        """
+        cleaned = text.strip()
+        if not cleaned:
+            return False
+        limit = max_chars if max_chars is not None else DEFAULT_MAX_MESSAGE_CHARS
+        truncated = False
+        if len(cleaned) > limit:
+            cleaned = cleaned[: limit - 3] + "..."
+            truncated = True
+        self.recent_turns.append(DialogueTurn(role=role, text=cleaned))
+        if len(self.recent_turns) > MAX_RECENT_TURNS:
+            self.recent_turns = self.recent_turns[-MAX_RECENT_TURNS:]
+        return truncated
+
     def known_summary(self) -> JsonObject:
-        """Compact view for LLM prompts and debugging."""
-        out: JsonObject = {"stage": self.stage.value}
+        """Compact view of *facts* for LLM prompts (no transcript, no stage labels)."""
+        out: JsonObject = {}
         self._put_field(out, "lives_in_nc", self.lives_in_nc)
         self._put_field(out, "household_size", self.household_size)
         self._put_field(out, "income_amount", self.income_amount)
@@ -128,18 +188,6 @@ class EligibilityCase(BaseModel):
                 if not c.resolved
             ]
             out["open_contradictions"] = open_c
-        if self.assessment:
-            a = self.assessment
-            out["assessment"] = {
-                "status": a.status.value,
-                "reasons": list(a.reasons),
-                "rule_version": a.rule_version,
-                "source_ids": list(a.source_ids),
-                "threshold_used": a.threshold_used,
-                "normalized_gross_monthly": a.normalized_gross_monthly,
-                "household_size": a.household_size,
-                "caveats": list(a.caveats),
-            }
         return out
 
     @staticmethod

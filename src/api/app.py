@@ -18,6 +18,7 @@ from src.config import get_settings
 from src.eligibility.ruleset import RULESET
 from src.process_turn import process_turn
 from src.session import SessionStoreProtocol, open_session_store
+from src.state.models import OPENING_MESSAGE
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -109,7 +110,10 @@ def health() -> HealthResponse:
 
 @app.post("/api/session", response_model=SessionCreateResponse)
 def create_session(request: Request) -> SessionCreateResponse:
-    return SessionCreateResponse(session_id=_get_store(request).create())
+    sid = _get_store(request).create()
+    case = _get_store(request).get(sid)
+    opening = case.recent_turns[0].text if case.recent_turns else OPENING_MESSAGE
+    return SessionCreateResponse(session_id=sid, opening_message=opening)
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -125,6 +129,8 @@ def chat(
     sessions.set(session_id, result.case)
 
     assessment_status = result.assessment.status.value if result.assessment is not None else None
+    # stage/assessment_status are for clients; reply text stays human-facing.
+    # Full plan/extract metadata only when ?debug=true.
     debug_payload: dict[str, object] | None = dict(result.debug) if debug else None
     return ChatResponse(
         session_id=session_id,
@@ -146,5 +152,6 @@ def session_state(request: Request, session_id: str) -> StateResponse:
 
 @app.post("/api/session/{session_id}/reset", response_model=SessionCreateResponse)
 def reset_session(request: Request, session_id: str) -> SessionCreateResponse:
-    _get_store(request).reset(session_id)
-    return SessionCreateResponse(session_id=session_id)
+    case = _get_store(request).reset(session_id)
+    opening = case.recent_turns[0].text if case.recent_turns else OPENING_MESSAGE
+    return SessionCreateResponse(session_id=session_id, opening_message=opening)

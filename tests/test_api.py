@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from src.api.app import app
 from src.process_turn import TurnResult
 from src.state.models import (
+    OPENING_MESSAGE,
     Assessment,
     AssessmentStatus,
     CaseField,
@@ -77,6 +78,7 @@ def test_create_chat_state_reset_flow() -> None:
         created = client.post("/api/session")
         assert created.status_code == 200
         sid = created.json()["session_id"]
+        assert created.json()["opening_message"] == OPENING_MESSAGE
 
         chat = client.post(
             "/api/chat",

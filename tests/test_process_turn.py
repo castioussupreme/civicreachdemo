@@ -13,9 +13,10 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key-not-used")
 
 from src.config import get_settings
 from src.extraction.schema import ExtractionResult
+from src.limits import LONG_MESSAGE_HISTORY_PLACEHOLDER, MESSAGE_TOO_LONG_REPLY
 from src.planner.missing import PlanResult
 from src.process_turn import process_turn
-from src.state.models import Assessment, AssessmentStatus, EligibilityCase
+from src.state.models import Assessment, AssessmentStatus, EligibilityCase, fresh_case
 
 get_settings.cache_clear()
 
@@ -249,6 +250,60 @@ def test_ssn_redacted_path(stub_llm: Callable[[list[ExtractionResult]], None]) -
     assert "111-22-3333" not in result.reply
     assert result.safety_action == "pii_warn"
     assert result.case.pii_warned is True
+    # Raw PII must not land in conversation history (Redis-bound)
+    history_blob = " ".join(t.text for t in result.case.recent_turns)
+    assert "111-22-3333" not in history_blob
+    assert "[REDACTED-SSN]" in history_blob
+
+
+def test_address_not_stored_in_history(stub_llm: Callable[[list[ExtractionResult]], None]) -> None:
+    stub_llm([_extract({})])
+    result = process_turn("I live at 45 Oak Avenue in Durham", EligibilityCase())
+    history_blob = " ".join(t.text for t in result.case.recent_turns)
+    assert "45 Oak Avenue" not in history_blob
+    assert "[REDACTED-ADDRESS]" in history_blob
+
+
+def test_message_too_long_asks_to_summarize(
+    stub_llm: Callable[[list[ExtractionResult]], None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key-not-used")
+    monkeypatch.setenv("MAX_MESSAGE_CHARS", "100")
+    get_settings.cache_clear()
+    try:
+        # Would call LLM if not short-circuited — queue must stay empty / unused
+        stub_llm([])
+        long_msg = "y" * 150
+        result = process_turn(long_msg, EligibilityCase())
+        assert result.safety_action == "message_too_long"
+        assert result.reply == MESSAGE_TOO_LONG_REPLY
+        assert "summar" in result.reply.lower() or "long" in result.reply.lower()
+        history = " ".join(t.text for t in result.case.recent_turns)
+        assert long_msg not in history
+        assert "y" * 50 not in history
+        assert LONG_MESSAGE_HISTORY_PLACEHOLDER in history
+        assert result.debug.get("stopped") == "message_too_long"
+        assert result.debug.get("max_message_chars") == 100
+    finally:
+        get_settings.cache_clear()
+
+
+def test_message_at_limit_is_accepted(
+    stub_llm: Callable[[list[ExtractionResult]], None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key-not-used")
+    monkeypatch.setenv("MAX_MESSAGE_CHARS", "100")
+    get_settings.cache_clear()
+    try:
+        stub_llm([_extract({})])
+        msg = "a" * 100
+        result = process_turn(msg, EligibilityCase())
+        assert result.safety_action != "message_too_long"
+        assert result.case.recent_turns[0].text == msg
+    finally:
+        get_settings.cache_clear()
 
 
 def test_multi_fact_one_message(stub_llm: Callable[[list[ExtractionResult]], None]) -> None:
@@ -338,6 +393,26 @@ def test_debug_payload_shape(stub_llm: Callable[[list[ExtractionResult]], None])
     assert "extraction" in result.debug
     assert "missing" in result.debug
     assert "stage" in result.debug
+    assert "turn_count" in result.debug
+    assert result.debug["history_turns"] == 2  # user + assistant
+
+
+def test_conversation_history_grows(stub_llm: Callable[[list[ExtractionResult]], None]) -> None:
+    stub_llm(
+        [
+            _extract({}),
+            _extract({"lives_in_nc": True, "confidence": {"lives_in_nc": 0.9}}),
+        ]
+    )
+    case = fresh_case()
+    assert case.recent_turns[0].role == "assistant"
+    r1 = process_turn("hi", case)
+    r2 = process_turn("I live in NC", r1.case)
+    # opening + (user, assistant) x 2
+    assert len(r2.case.recent_turns) == 5
+    assert r2.case.recent_turns[1].role == "user"
+    assert r2.case.recent_turns[1].text == "hi"
+    assert r2.case.recent_turns[-1].role == "assistant"
 
 
 def test_does_not_mutate_input_case(
@@ -348,3 +423,4 @@ def test_does_not_mutate_input_case(
     result = process_turn("I live in NC", original)
     assert original.lives_in_nc.value is None
     assert result.case.lives_in_nc.value is True
+    assert original.recent_turns == []

@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from pydantic import AfterValidator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from src.limits import DEFAULT_MAX_MESSAGE_CHARS, HARD_MAX_MESSAGE_CHARS
+
 ROOT = Path(__file__).resolve().parents[1]
 KNOWLEDGE_DIR = ROOT / "knowledge"
 
@@ -47,6 +49,14 @@ class Settings(BaseSettings):
     # - Agent container (embedded Redis): redis://redis:6379/0  (Compose DNS)
     # - Host CLI: ignore that and use public_redis_url (e.g. redis://localhost:16379/0)
     redis_url: str = Field(default="", validation_alias="REDIS_URL")
+
+    # Same limit for accepted user input and transcript retention (override via env).
+    max_message_chars: int = Field(
+        default=DEFAULT_MAX_MESSAGE_CHARS,
+        ge=100,
+        le=HARD_MAX_MESSAGE_CHARS,
+        validation_alias="MAX_MESSAGE_CHARS",
+    )
 
     def effective_redis_url(self) -> str:
         """

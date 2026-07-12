@@ -27,34 +27,53 @@ FIELD_PRIORITY = [
 QUESTION_HINTS = {
     "lives_in_nc": "Do you currently live in North Carolina?",
     "household_size": (
-        "How many people are in your household who buy and prepare food together (including you)?"
+        "How many people buy and prepare food together with you (including yourself)?"
     ),
     "income_amount": (
-        "About how much income does your household receive before taxes? "
-        "You can give a number and say if it is weekly, biweekly, monthly, or yearly."
+        "About how much income does your household get before taxes? "
+        "A round number is fine — weekly, every two weeks, monthly, or yearly."
     ),
-    "income_period": (
-        "Is that income amount weekly, every two weeks (biweekly), monthly, or yearly?"
-    ),
-    "gross_or_net": ("Is that amount roughly before taxes (gross) or after taxes (net/take-home)?"),
+    "income_period": ("Is that amount weekly, every two weeks, monthly, or yearly?"),
+    "gross_or_net": ("Is that roughly before taxes, or take-home pay after taxes?"),
     "household_or_individual": (
-        "Is that the total income for everyone in the household, or just your own income?"
-    ),
-    "confirm_conflict": (
-        "I noticed a possible change from something you said earlier. "
-        "Which value should I use going forward?"
+        "Is that the total for everyone in the household, or just your income?"
     ),
 }
+
+# Human labels for conflict prompts (never expose raw schema field names alone)
+FIELD_LABELS = {
+    "lives_in_nc": "whether you live in North Carolina",
+    "household_size": "household size",
+    "income_amount": "income amount",
+    "income_period": "how often that income is paid",
+    "gross_or_net": "whether income is before or after taxes",
+    "household_or_individual": "whether income is household-total or just yours",
+    "is_student": "student status",
+    "elderly_or_disabled_member": "whether someone is elderly or disabled",
+}
+
+
+def _conflict_question(case: EligibilityCase, field: str) -> str:
+    label = FIELD_LABELS.get(field, field.replace("_", " "))
+    open_c = next((c for c in case.contradictions if c.field == field and not c.resolved), None)
+    if open_c is not None:
+        return (
+            f"I want to make sure I have this right about {label}. "
+            f"Earlier it sounded like {open_c.previous_value!s}, "
+            f"and later like {open_c.proposed_value!s}. "
+            f"Which should I use?"
+        )
+    return f"I noticed a possible change about {label}. Which value should I use going forward?"
 
 
 def determine_missing_fields(case: EligibilityCase) -> PlanResult:
     open_conflicts = [c.field for c in case.contradictions if not c.resolved]
     if open_conflicts:
+        field = open_conflicts[0]
         return PlanResult(
-            missing_fields=["confirm_conflict:" + open_conflicts[0]],
+            missing_fields=["confirm_conflict:" + field],
             stage=Stage.CLARIFYING,
-            next_question_hint=QUESTION_HINTS["confirm_conflict"]
-            + f" (field: {open_conflicts[0]})",
+            next_question_hint=_conflict_question(case, field),
             ready_to_assess=False,
             open_contradictions=open_conflicts,
         )

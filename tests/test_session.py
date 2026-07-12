@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from src.session import SessionStore, open_session_store
-from src.state.models import CaseField, EligibilityCase, FieldStatus
+from src.session import SESSION_TTL_SECONDS, SessionStore, open_session_store
+from src.state.models import OPENING_MESSAGE, CaseField, EligibilityCase, FieldStatus, fresh_case
 
 
 def test_open_session_store() -> None:
@@ -34,6 +34,8 @@ def test_redis_round_trip() -> None:
         store = SessionStore("redis://localhost:6379/0")
         sid = store.create()
         case = store.get(sid)
+        assert case.recent_turns
+        assert case.recent_turns[0].text == OPENING_MESSAGE
         case.household_size = CaseField(status=FieldStatus.KNOWN, value=3)
         case.turn_count = 1
         store.set(sid, case)
@@ -45,6 +47,7 @@ def test_redis_round_trip() -> None:
         store.reset(sid)
         fresh = store.get(sid)
         assert fresh.household_size.value is None
+        assert fresh.recent_turns[0].text == OPENING_MESSAGE
 
 
 def test_redis_get_missing_key_initializes() -> None:
@@ -56,4 +59,17 @@ def test_redis_get_missing_key_initializes() -> None:
         store = SessionStore("redis://localhost:6379/0")
         case = store.get("missing-id")
         assert isinstance(case, EligibilityCase)
+        assert case.recent_turns[0].role == "assistant"
         assert client.set.called
+
+
+def test_set_uses_sliding_ttl() -> None:
+    """Session + conversation + case data share one key; set() refreshes TTL."""
+    client = MagicMock()
+    with patch("src.session.redis.Redis.from_url", return_value=client):
+        store = SessionStore("redis://localhost:6379/0")
+        store.set("abc123", fresh_case())
+        assert client.set.called
+        _args, kwargs = client.set.call_args
+        assert kwargs.get("ex") == SESSION_TTL_SECONDS
+        assert SESSION_TTL_SECONDS == 60 * 60 * 24

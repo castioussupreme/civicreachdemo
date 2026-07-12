@@ -13,7 +13,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key-not-used")
 os.environ.setdefault("PUBLIC_REDIS_URL", "redis://localhost:6379/0")
 
 from src.config import get_settings
-from src.state.models import EligibilityCase
+from src.state.models import EligibilityCase, fresh_case
 
 
 class FakeSessionStore:
@@ -24,19 +24,19 @@ class FakeSessionStore:
 
     def create(self) -> str:
         sid = str(uuid.uuid4())[:8]
-        self._sessions[sid] = EligibilityCase()
+        self._sessions[sid] = fresh_case()
         return sid
 
     def get(self, session_id: str) -> EligibilityCase:
         if session_id not in self._sessions:
-            self._sessions[session_id] = EligibilityCase()
+            self._sessions[session_id] = fresh_case()
         return self._sessions[session_id]
 
     def set(self, session_id: str, case: EligibilityCase) -> None:
         self._sessions[session_id] = case
 
     def reset(self, session_id: str) -> EligibilityCase:
-        case = EligibilityCase()
+        case = fresh_case()
         self._sessions[session_id] = case
         return case
 

@@ -59,45 +59,36 @@ ADDRESS_PATTERN = re.compile(
 )
 
 CRISIS_RESPONSE = (
-    "I'm concerned about your safety. I'm not able to help with crisis situations, "
-    "but real people can.\n\n"
-    "- If you are in immediate danger, call **911**.\n"
-    "- National Suicide & Crisis Lifeline: call or text **988** (US).\n"
-    "- https://988lifeline.org/\n\n"
-    "I won't continue eligibility screening right now. Please reach out for support."
+    "I'm really glad you said something — I'm not the right support for a crisis, "
+    "but people who can help are a call or text away.\n\n"
+    "If you're in immediate danger, call **911**. In the US you can also call or text "
+    "**988** (Suicide & Crisis Lifeline): https://988lifeline.org/\n\n"
+    "I'll pause the food-assistance chat for now. Please reach out to them."
 )
 
 APPLICATION_RESPONSE = (
-    "I can't submit applications, contact DSS, or log into government systems. "
-    "I'm only an informal screening assistant.\n\n"
-    "You can apply yourself via **NC ePASS** (https://epass.nc.gov/) or your local "
-    "county Department of Social Services. If you want, I can keep helping you "
-    "understand whether you *might* qualify based on public rules."
+    "I can't submit an application or log into government systems for you — only you "
+    "(or someone you authorize with the agency) can do that.\n\n"
+    "You can apply on **NC ePASS** (https://epass.nc.gov/) or through your county DSS. "
+    "If you'd like, I can still help you think through whether you *might* qualify."
 )
 
 SCOPE_RESPONSE = (
-    "That request is outside what I can help with. I only provide informal screening "
-    "information about **North Carolina FNS (SNAP food assistance)** based on public "
-    "eligibility documents.\n\n"
-    "For other benefits or emergencies, try dialing **211** or contacting the "
-    "appropriate agency. If you want to check likely FNS eligibility, tell me about "
-    "your household and income."
+    "That's outside what I can help with — I only do a simple North Carolina food "
+    "assistance (FNS/SNAP) likelihood check.\n\n"
+    "For other benefits or local help, try **211**. If you want to check FNS, tell me "
+    "about your household and income whenever you're ready."
 )
 
 INJECTION_RESPONSE = (
-    "I can't change my operating rules or ignore safety constraints. "
-    "I'll continue only as an NC FNS screening assistant using fixed eligibility "
-    "rules and curated public documents.\n\n"
-    "If you're here about food assistance eligibility, share what you're comfortable "
-    "sharing about household size and income (no SSN or full address needed)."
+    "I can't change how I work or ignore those limits. I'll stick to a simple NC food "
+    "assistance screen using public rules. If that's what you need, share household size "
+    "and income when you're ready — no SSN or full address needed."
 )
 
 PII_RESPONSE = (
-    "Please don't share Social Security numbers, full street addresses, or other "
-    "sensitive identifiers here. I don't need them for a likelihood screen, and I "
-    "won't store them.\n\n"
-    "You can continue with general facts only (for example household size and "
-    "approximate income)."
+    "Please skip SSNs and full street addresses — I don't need them for this check and "
+    "won't keep them. Household size and a rough income amount are enough."
 )
 
 

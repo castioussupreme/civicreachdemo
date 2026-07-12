@@ -47,7 +47,14 @@ class CaseField(BaseModel, Generic[T]):
         return self.status == FieldStatus.KNOWN and self.value is not None
 
 
-IncomePeriod = Literal["daily", "weekly", "biweekly", "monthly", "annual"]
+IncomePeriod = Literal[
+    "daily",
+    "weekly",
+    "biweekly",
+    "semimonthly",
+    "monthly",
+    "annual",
+]
 GrossOrNet = Literal["gross", "net"]
 HouseholdOrIndividual = Literal["household", "individual"]
 
@@ -127,6 +134,9 @@ class EligibilityCase(BaseModel):
     # Soft flags from safety (non-blocking unless safety handler stops)
     pii_warned: bool = False
     notes: list[str] = Field(default_factory=list)
+    # One-shot follow-ups for incomplete income (no invented math)
+    asked_for_gross_amount: bool = False
+    asked_for_household_total: bool = False
 
     # Wording-only chat memory (does not drive eligibility)
     recent_turns: list[DialogueTurn] = Field(default_factory=list)

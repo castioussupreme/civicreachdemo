@@ -138,6 +138,7 @@ def apply_validated_updates(
         "daily",
         "weekly",
         "biweekly",
+        "semimonthly",
         "monthly",
         "annual",
     }:

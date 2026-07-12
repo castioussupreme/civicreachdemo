@@ -82,6 +82,11 @@ def test_coerce_accepts_daily_period() -> None:
     assert facts.get("income_period") == "daily"
 
 
+def test_coerce_accepts_semimonthly_period() -> None:
+    result = coerce_extraction({"facts": {"income_amount": 1000, "income_period": "semimonthly"}})
+    assert result["facts"].get("income_period") == "semimonthly"
+
+
 def test_coerce_confirm_fields() -> None:
     result = coerce_extraction(
         {

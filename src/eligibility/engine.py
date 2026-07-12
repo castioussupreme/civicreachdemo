@@ -59,13 +59,12 @@ def calculate_eligibility(
     # Income readiness
     income_status = case.normalized_gross_monthly.status
     if income_status == FieldStatus.UNKNOWN or case.normalized_gross_monthly.value is None:
-        # Check if we have partial income
         if case.income_amount.status == FieldStatus.UNCERTAIN:
             return Assessment(
                 status=AssessmentStatus.NEEDS_MORE_INFORMATION,
                 reasons=[
                     "Income was stated approximately; need a clearer amount "
-                    "and whether it is monthly/weekly and gross household income."
+                    "and whether it is daily/weekly/monthly and gross household income."
                 ],
                 rule_version=ruleset.id,
                 source_ids=[*source_ids, "nc-fns-income-limits"],
@@ -93,38 +92,19 @@ def calculate_eligibility(
     monthly = float(monthly_val)
     threshold = ruleset.threshold_for_household(size)
 
-    # Net income or individual-only income → cannot firmly conclude from gross screen
+    # Uncertain normalized income (net take-home and/or individual-only in multi-person HH)
     if income_status == FieldStatus.UNCERTAIN:
-        extra = []
-        if case.gross_or_net.is_usable() and case.gross_or_net.value == "net":
-            extra.append("Income appears to be net (after taxes); this screen uses gross income.")
-            source_ids = [*source_ids, "nc-fns-income-limits"]
-        if (
-            case.household_or_individual.is_usable()
-            and case.household_or_individual.value == "individual"
-            and size > 1
-        ):
-            extra.append(
-                "Income may be individual only; screening needs total household income "
-                "for everyone who buys and prepares food together."
-            )
-        return Assessment(
-            status=AssessmentStatus.UNABLE_TO_DETERMINE,
-            reasons=extra
-            or ["Income details are too uncertain to complete a reliable gross screen."],
-            rule_version=ruleset.id,
-            source_ids=[*source_ids, "nc-fns-income-limits"],
-            threshold_used=threshold,
-            normalized_gross_monthly=monthly,
-            household_size=size,
-            caveats=[
-                *caveats,
-                f"Provisional normalized monthly figure used for discussion: ${monthly:,.2f}; "
-                f"public table threshold for household of {size}: ${threshold:,.2f}.",
-            ],
+        return _assess_uncertain_income(
+            case=case,
+            monthly=monthly,
+            size=size,
+            threshold=threshold,
+            ruleset=ruleset,
+            source_ids=source_ids,
+            caveats=caveats,
         )
 
-    # Gross income comparison
+    # Gross income comparison (confirmed gross household)
     under = monthly <= threshold
     if under:
         reasons.append(
@@ -139,19 +119,23 @@ def calculate_eligibility(
         )
         status = AssessmentStatus.LIKELY_INELIGIBLE
 
-    # Student caveat: never claim full student determination
+    # Student: report income result clearly, but do not claim full student determination
     if case.is_student.is_usable() and case.is_student.value is True:
         source_ids = [*source_ids, "nc-fns-student-rules"]
         caveats.append(
-            "User indicated college student status. Students often need an additional "
-            "exemption beyond income; DSS (or campus outreach) must evaluate student rules."
+            "College student rules are not fully modeled here. Students often need an "
+            "additional exemption beyond the income screen; DSS or campus outreach must decide."
         )
         if status == AssessmentStatus.LIKELY_ELIGIBLE:
-            # Soften: still pass gross screen but flag uncertainty
             status = AssessmentStatus.UNABLE_TO_DETERMINE
             reasons.append(
-                "Gross income screen may pass, but student-specific rules are not "
-                "fully evaluated by this POC—treat as uncertain overall."
+                "On the simple gross-income table alone this would look like a pass, "
+                "but student-specific FNS rules are not evaluated by this tool — "
+                "so overall we cannot give a confident screening result."
+            )
+        else:
+            reasons.append(
+                "Student status does not change a failed gross-income screen on this tool."
             )
 
     if case.elderly_or_disabled_member.is_usable() and case.elderly_or_disabled_member.value:
@@ -169,4 +153,99 @@ def calculate_eligibility(
         normalized_gross_monthly=monthly,
         household_size=size,
         caveats=caveats,
+    )
+
+
+def _assess_uncertain_income(
+    *,
+    case: EligibilityCase,
+    monthly: float,
+    size: int,
+    threshold: float,
+    ruleset: Ruleset,
+    source_ids: list[str],
+    caveats: list[str],
+) -> Assessment:
+    is_net = case.gross_or_net.is_usable() and case.gross_or_net.value == "net"
+    is_individual = (
+        case.household_or_individual.is_usable()
+        and case.household_or_individual.value == "individual"
+        and size > 1
+    )
+
+    # Safe lower-bound math (no tax brackets, no inventing other members' pay):
+    # true gross household income ≥ stated take-home, and ≥ stated individual income.
+    if monthly > threshold and (is_net or is_individual):
+        if is_net and is_individual:
+            bound_why = (
+                f"You shared take-home income for one person of about ${monthly:,.2f}/month. "
+                f"Full household before-tax income is at least that high."
+            )
+        elif is_net:
+            bound_why = (
+                f"You shared take-home (after-tax) income of about ${monthly:,.2f}/month. "
+                f"Before-tax income is at least that high."
+            )
+        else:
+            bound_why = (
+                f"You shared one person's income of about ${monthly:,.2f}/month. "
+                f"Total household income is at least that high."
+            )
+        return Assessment(
+            status=AssessmentStatus.LIKELY_INELIGIBLE,
+            reasons=[
+                f"{bound_why} The public gross limit for a household of {size} is "
+                f"${threshold:,.2f} — so this simple screen points to likely not eligible."
+            ],
+            rule_version=ruleset.id,
+            source_ids=[*source_ids, "nc-fns-income-limits"],
+            threshold_used=threshold,
+            normalized_gross_monthly=monthly,
+            household_size=size,
+            caveats=[
+                *caveats,
+                "Bound uses a lower bound on income (take-home and/or one person only); "
+                "no tax reverse-calculation or invented household totals.",
+            ],
+        )
+
+    extra: list[str] = []
+    if is_net:
+        extra.append(
+            "Income was given as take-home (after taxes). This screen compares "
+            "before-tax (gross) income to the public table. We do not reverse-calculate "
+            "gross from tax brackets — that would be guesswork."
+        )
+        source_ids = [*source_ids, "nc-fns-income-limits"]
+    if is_individual:
+        extra.append(
+            "Income may be for one person only; screening needs total household income "
+            "for everyone who buys and prepares food together. We do not invent "
+            "other members' earnings."
+        )
+        source_ids = [*source_ids, "nc-fns-income-limits"]
+
+    parts: list[str] = []
+    if is_net:
+        parts.append("take-home")
+    if is_individual:
+        parts.append("one-person")
+    label = " / ".join(parts) if parts else "provisional"
+
+    return Assessment(
+        status=AssessmentStatus.UNABLE_TO_DETERMINE,
+        reasons=extra or ["Income details are too uncertain to complete a reliable gross screen."],
+        rule_version=ruleset.id,
+        source_ids=list(dict.fromkeys([*source_ids, "nc-fns-income-limits"])),
+        threshold_used=threshold,
+        normalized_gross_monthly=monthly,
+        household_size=size,
+        caveats=[
+            *caveats,
+            f"Your {label} amount normalized to about ${monthly:,.2f}/month "
+            f"(not confirmed full gross household income). Public gross threshold for "
+            f"household of {size}: ${threshold:,.2f}. "
+            f"If you know approximate before-tax total household income, we can re-run "
+            f"this simple screen; otherwise DSS can review a full application.",
+        ],
     )

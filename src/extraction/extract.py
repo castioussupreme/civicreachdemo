@@ -17,7 +17,7 @@ Schema:
     "lives_in_nc": true|false|null,
     "household_size": number|null,
     "income_amount": number|null,
-    "income_period": "daily"|"weekly"|"biweekly"|"monthly"|"annual"|null,
+    "income_period": "daily"|"weekly"|"biweekly"|"semimonthly"|"monthly"|"annual"|null,
     "gross_or_net": "gross"|"net"|null,
     "household_or_individual": "household"|"individual"|null,
     "is_student": true|false|null,
@@ -36,7 +36,19 @@ Rules:
 - "2k a month" -> income_amount 2000, income_period monthly.
 - "200 a day" / "200/day" / "I make 200 daily" -> income_amount 200, income_period daily.
 - "per day" or "a day" means daily (not weekly).
+- "every two weeks" / biweekly -> biweekly. "twice a month" / "1st and 15th" / semi-monthly -> semimonthly (NOT biweekly).
 - "I make about $2,500" without period -> income_amount 2500, income_period null, confidence lower.
+- Hourly wages ("$15 an hour"): set income_amount to the hourly rate, income_period null,
+  notes="hourly wage — need hours per week"; do NOT invent hours or monthly total.
+- If previous_question asks for before-tax / gross amount and the user gives a number,
+  set income_amount to that number and gross_or_net to "gross" (keep income_period if unchanged).
+- If previous_question asks for total household income and the user gives a number,
+  set income_amount to that number and household_or_individual to "household".
+- If they say they only know take-home / don't know before-tax, set gross_or_net to "net"
+  and leave income_amount as previously known take-home (do not invent a gross amount).
+- If they only know their own income (not others), household_or_individual=individual.
+- Never invent gross from net using tax rates or brackets.
+- Never invent other household members' income.
 - Do not extract SSN or addresses.
 - confirm_field/confirm_value only if user is resolving a prior contradiction.
 - Use recent_conversation only to interpret short answers (e.g. "yes", "monthly", "the second one").

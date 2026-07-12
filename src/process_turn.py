@@ -140,6 +140,11 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
     case.last_missing_fields = plan.missing_fields
     if plan.next_question_hint:
         case.last_question = plan.next_question_hint
+    # Remember one-shot follow-ups so we do not loop forever
+    if "approx_gross" in plan.missing_fields:
+        case.asked_for_gross_amount = True
+    if "approx_household_total" in plan.missing_fields:
+        case.asked_for_household_total = True
 
     assessment: Assessment | None = None
     citations: list[Citation] = []

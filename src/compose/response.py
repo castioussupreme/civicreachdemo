@@ -44,8 +44,11 @@ def _friendly_outcome(status: AssessmentStatus) -> str:
             "Based on the public income screen, they may not qualify — say that gently and clearly."
         ),
         AssessmentStatus.UNABLE_TO_DETERMINE: (
-            "You cannot give a clear yes/no from this simple screen — explain why in plain words "
-            "and what they could do next (e.g. apply so DSS can review)."
+            "You cannot give a clean yes/no from this simple screen. Explain why in plain words "
+            "using reasons (take-home vs before-tax, one person vs whole household, student rules, "
+            "etc.). Do NOT invent tax brackets, other people's income, or student exemptions. "
+            "If the gross table would have passed but student status blocks confidence, say that "
+            "clearly. Suggest applying so DSS can review, or sharing the missing detail if simple."
         ),
         AssessmentStatus.NEEDS_MORE_INFORMATION: (
             "Do not announce a status. Just ask for the missing detail naturally."

@@ -96,6 +96,7 @@ def _coerce_facts(raw: object) -> ExtractionFacts:
         "daily",
         "weekly",
         "biweekly",
+        "semimonthly",
         "monthly",
         "annual",
     }:

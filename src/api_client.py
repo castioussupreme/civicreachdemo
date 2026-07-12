@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 
 from src.json_types import JsonObject, as_json_object
 
@@ -20,7 +20,7 @@ class AgentApiClient:
 
     def __init__(self, base_url: str, *, timeout: float = 120.0) -> None:
         self._base = base_url.rstrip("/")
-        self._http = httpx.Client(base_url=self._base, timeout=timeout)
+        self._http = httpx2.Client(base_url=self._base, timeout=timeout)
 
     def close(self) -> None:
         self._http.close()
@@ -67,7 +67,7 @@ class AgentApiClient:
     def _get_json(self, path: str) -> JsonObject:
         try:
             resp = self._http.get(path)
-        except httpx.RequestError as exc:
+        except httpx2.RequestError as exc:
             raise AgentApiError(
                 "Cannot reach the API. Start the stack (make up-d / make dev) first."
             ) from exc
@@ -76,13 +76,13 @@ class AgentApiClient:
     def _post_json(self, path: str, *, json_body: JsonObject | None) -> JsonObject:
         try:
             resp = self._http.post(path, json=json_body if json_body is not None else {})
-        except httpx.RequestError as exc:
+        except httpx2.RequestError as exc:
             raise AgentApiError(
                 "Cannot reach the API. Start the stack (make up-d / make dev) first."
             ) from exc
         return self._parse(resp)
 
-    def _parse(self, resp: httpx.Response) -> JsonObject:
+    def _parse(self, resp: httpx2.Response) -> JsonObject:
         if resp.status_code >= 400:
             detail = None
             try:

@@ -26,6 +26,9 @@ def configure_client_logging(*, verbose: bool = False) -> None:
         "src.retrieval.retrieve",
         "src.openai_errors",
         "openai",
+        "httpx2",
+        "httpcore2",
+        # Transitive classic httpx (e.g. openai SDK) if present
         "httpx",
         "httpcore",
     ):

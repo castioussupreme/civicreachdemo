@@ -83,6 +83,40 @@ def stub_llm() -> Callable[[list[ExtractionResult]], None]:
         yield set_queue
 
 
+def test_daily_income_normalizes_and_assesses(
+    stub_llm: Callable[[list[ExtractionResult]], None],
+) -> None:
+    """End-to-end: $200/day → monthly ≈ 6083.33 → likely ineligible for size 1."""
+    stub_llm(
+        [
+            _extract(
+                {
+                    "lives_in_nc": True,
+                    "household_size": 1,
+                    "income_amount": 200,
+                    "income_period": "daily",
+                    "gross_or_net": "gross",
+                    "household_or_individual": "household",
+                    "confidence": {
+                        "lives_in_nc": 0.9,
+                        "household_size": 0.9,
+                        "income_amount": 0.9,
+                        "income_period": 0.9,
+                        "gross_or_net": 0.9,
+                        "household_or_individual": 0.9,
+                    },
+                }
+            ),
+        ]
+    )
+    result = process_turn("200 a day", EligibilityCase())
+    assert result.case.income_period.value == "daily"
+    assert result.case.normalized_gross_monthly.value == round(200 * 365 / 12, 2)
+    assert result.case.assessment is not None
+    assert result.case.assessment.status == AssessmentStatus.LIKELY_INELIGIBLE
+    assert result.case.assessment.normalized_gross_monthly == round(200 * 365 / 12, 2)
+
+
 def test_happy_path_likely_eligible(stub_llm: Callable[[list[ExtractionResult]], None]) -> None:
     stub_llm(
         [

@@ -56,7 +56,7 @@ def test_coerce_rejects_bad_period_and_bool_as_int() -> None:
     result = coerce_extraction(
         {
             "facts": {
-                "income_period": "daily",
+                "income_period": "hourly",  # not a supported period
                 "household_size": True,  # bool must not become 1
                 "income_amount": False,
             }
@@ -66,6 +66,20 @@ def test_coerce_rejects_bad_period_and_bool_as_int() -> None:
     assert "income_period" not in facts or facts.get("income_period") is None
     assert "household_size" not in facts or facts.get("household_size") is None
     assert "income_amount" not in facts or facts.get("income_amount") is None
+
+
+def test_coerce_accepts_daily_period() -> None:
+    result = coerce_extraction(
+        {
+            "facts": {
+                "income_amount": 200,
+                "income_period": "daily",
+            }
+        }
+    )
+    facts = result["facts"]
+    assert facts.get("income_amount") == 200
+    assert facts.get("income_period") == "daily"
 
 
 def test_coerce_confirm_fields() -> None:

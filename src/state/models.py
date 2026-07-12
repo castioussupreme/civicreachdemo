@@ -47,7 +47,7 @@ class CaseField(BaseModel, Generic[T]):
         return self.status == FieldStatus.KNOWN and self.value is not None
 
 
-IncomePeriod = Literal["weekly", "biweekly", "monthly", "annual"]
+IncomePeriod = Literal["daily", "weekly", "biweekly", "monthly", "annual"]
 GrossOrNet = Literal["gross", "net"]
 HouseholdOrIndividual = Literal["household", "individual"]
 

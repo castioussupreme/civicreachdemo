@@ -92,7 +92,13 @@ def _coerce_facts(raw: object) -> ExtractionFacts:
         facts["income_amount"] = amount
 
     period = raw.get("income_period")
-    if isinstance(period, str) and period in {"weekly", "biweekly", "monthly", "annual"}:
+    if isinstance(period, str) and period in {
+        "daily",
+        "weekly",
+        "biweekly",
+        "monthly",
+        "annual",
+    }:
         facts["income_period"] = cast(IncomePeriod, period)
 
     gon = raw.get("gross_or_net")

@@ -22,6 +22,7 @@ def _uncertain(value: T) -> CaseField[T]:
 
 
 def test_normalize_income_all_periods() -> None:
+    assert normalize_to_monthly(200, "daily") == round(200 * 365 / 12, 2)
     assert normalize_to_monthly(100, "weekly") == round(100 * 52 / 12, 2)
     assert normalize_to_monthly(1000, "biweekly") == round(1000 * 26 / 12, 2)
     assert normalize_to_monthly(2500, "monthly") == 2500

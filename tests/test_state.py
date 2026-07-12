@@ -73,6 +73,31 @@ def test_normalize_weekly_and_annual() -> None:
     assert annual.normalized_gross_monthly.value == 3000.0
 
 
+def test_normalize_daily_two_hundred_a_day() -> None:
+    """\"200 a day\" → daily period → monthly = 200 * 365 / 12."""
+    case = apply_validated_updates(
+        EligibilityCase(),
+        {
+            "facts": {
+                "income_amount": 200,
+                "income_period": "daily",
+                "gross_or_net": "gross",
+                "household_or_individual": "household",
+                "confidence": {
+                    "income_amount": 0.9,
+                    "income_period": 0.9,
+                    "gross_or_net": 0.9,
+                    "household_or_individual": 0.9,
+                },
+            }
+        },
+        turn=1,
+    )
+    assert case.income_period.value == "daily"
+    assert case.normalized_gross_monthly.status == FieldStatus.KNOWN
+    assert case.normalized_gross_monthly.value == round(200 * 365 / 12, 2)
+
+
 def test_uncertain_about_income() -> None:
     case = EligibilityCase()
     case = apply_validated_updates(
@@ -213,7 +238,7 @@ def test_invalid_period_ignored() -> None:
         {
             "facts": {
                 "income_amount": 1000,
-                "income_period": "daily",  # type: ignore[typeddict-item]
+                "income_period": "hourly",  # type: ignore[typeddict-item]
                 "confidence": {"income_amount": 0.9, "income_period": 0.9},
             }
         },

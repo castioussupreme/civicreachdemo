@@ -134,7 +134,13 @@ def apply_validated_updates(
             )
 
     period = facts.get("income_period")
-    if period is not None and period in {"weekly", "biweekly", "monthly", "annual"}:
+    if period is not None and period in {
+        "daily",
+        "weekly",
+        "biweekly",
+        "monthly",
+        "annual",
+    }:
         typed_period: IncomePeriod = period
         _set_field(
             case.income_period,

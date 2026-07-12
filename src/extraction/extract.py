@@ -17,7 +17,7 @@ Schema:
     "lives_in_nc": true|false|null,
     "household_size": number|null,
     "income_amount": number|null,
-    "income_period": "weekly"|"biweekly"|"monthly"|"annual"|null,
+    "income_period": "daily"|"weekly"|"biweekly"|"monthly"|"annual"|null,
     "gross_or_net": "gross"|"net"|null,
     "household_or_individual": "household"|"individual"|null,
     "is_student": true|false|null,
@@ -34,6 +34,8 @@ Schema:
 Rules:
 - income_amount should be numeric only (no $).
 - "2k a month" -> income_amount 2000, income_period monthly.
+- "200 a day" / "200/day" / "I make 200 daily" -> income_amount 200, income_period daily.
+- "per day" or "a day" means daily (not weekly).
 - "I make about $2,500" without period -> income_amount 2500, income_period null, confidence lower.
 - Do not extract SSN or addresses.
 - confirm_field/confirm_value only if user is resolving a prior contradiction.

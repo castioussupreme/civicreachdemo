@@ -1,7 +1,7 @@
-# Docker Compose: agent API + optional embedded Redis.
-# Prefer: ./start
+# Docker Compose: agent API + optional embedded Redis + optional embedded Qdrant.
+# Prefer: make dev / ./start.py
 #   - no REDIS_URL → spawns Redis (profile embedded-redis)
-#   - REDIS_URL set → uses that Redis (no Redis container)
+#   - no QDRANT_URL → spawns Qdrant (profile embedded-qdrant)
 
 name: civicreach-fns
 
@@ -20,6 +20,22 @@ services:
       - redis_data:/data
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
 
+  qdrant:
+    profiles: ["embedded-qdrant"]
+    # Align with qdrant-client pin in poetry.lock (~1.15.x).
+    image: qdrant/qdrant:v1.15.1
+    ports:
+      - "${QDRANT_PORT:-0}:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    # Image is minimal; TCP check is enough for depends_on readiness.
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 10s
+
   agent:
     build:
       context: .
@@ -30,15 +46,24 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-      # Client URL inside the stack (embedded service name, or host.docker.internal/external)
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
       REDIS_URL: ${REDIS_URL}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
       PUBLIC_REDIS_URL: ${PUBLIC_REDIS_URL}
+      QDRANT_URL: ${QDRANT_URL}
+      PUBLIC_QDRANT_URL: ${PUBLIC_QDRANT_URL}
     depends_on:
       redis:
         condition: service_healthy
         required: false
-    restart: unless-stopped
+      qdrant:
+        condition: service_healthy
+        required: false
+    # on-failure: only restart when exit code != 0.
+    # Permanent OpenAI failures (quota/auth) exit 0 so we stop gracefully without a loop.
+    # Transient errors exit non-zero and Docker will retry.
+    restart: on-failure
 
 volumes:
   redis_data:
+  qdrant_data:

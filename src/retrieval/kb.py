@@ -1,7 +1,8 @@
+"""Knowledge corpus loaders and citation types (shared by RAG)."""
+
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -62,66 +63,6 @@ def get_by_id(source_id: str) -> SourceDoc | None:
     return None
 
 
-def _tokenize(text: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]+", text.lower()))
-
-
-def retrieve(
-    query: str,
-    *,
-    source_ids: list[str] | None = None,
-    limit: int = 3,
-) -> list[Citation]:
-    """
-    Simple keyword retrieval over curated docs.
-    If source_ids provided, prefer those (assessment grounding).
-    """
-    docs = list(load_corpus())
-    if source_ids:
-        preferred = [d for d in docs if d.id in source_ids]
-        # Keep preferred order by source_ids
-        preferred.sort(key=lambda d: source_ids.index(d.id) if d.id in source_ids else 99)
-        others = [d for d in docs if d.id not in source_ids]
-        ordered = preferred + others
-    else:
-        ordered = docs
-
-    q_tokens = _tokenize(query)
-    scored: list[tuple[float, SourceDoc]] = []
-    for d in ordered:
-        overlap = float(len(q_tokens & _tokenize(d.text + " " + d.title)))
-        score = 100.0 + overlap if source_ids and d.id in source_ids else overlap
-        if score > 0 or (source_ids and d.id in source_ids):
-            scored.append((score, d))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    citations: list[Citation] = []
-    for _, d in scored[:limit]:
-        snippet = d.text.strip().split("\n\n")[0][:400]
-        citations.append(
-            Citation(
-                source_id=d.id,
-                title=d.title,
-                url=d.url,
-                snippet=snippet,
-                effective_from=d.effective_from,
-                effective_to=d.effective_to,
-            )
-        )
-    return citations
-
-
-def retrieve_supporting_policy(
-    assessment_source_ids: list[str],
-    *,
-    user_query: str = "",
-    limit: int = 3,
-) -> list[Citation]:
-    return retrieve(
-        user_query or "eligibility income household", source_ids=assessment_source_ids, limit=limit
-    )
-
-
 def format_citations(citations: list[Citation]) -> str:
     if not citations:
         return ""
@@ -136,3 +77,29 @@ def format_citations(citations: list[Citation]) -> str:
         url = f" — {c.url}" if c.url else ""
         lines.append(f"- [{c.source_id}] {c.title}{eff}{url}")
     return "\n".join(lines)
+
+
+# Public retrieve API (vector RAG) — re-exported for stable imports.
+# Lazy imports avoid circular import with retrieve.py → kb.Citation.
+def retrieve(
+    query: str,
+    *,
+    source_ids: list[str] | None = None,
+    limit: int = 3,
+) -> list[Citation]:
+    from src.retrieval.retrieve import retrieve as _vector_retrieve  # noqa: PLC0415
+
+    return _vector_retrieve(query, source_ids=source_ids, limit=limit)
+
+
+def retrieve_supporting_policy(
+    assessment_source_ids: list[str],
+    *,
+    user_query: str = "",
+    limit: int = 3,
+) -> list[Citation]:
+    from src.retrieval.retrieve import (  # noqa: PLC0415
+        retrieve_supporting_policy as _vector_support,
+    )
+
+    return _vector_support(assessment_source_ids, user_query=user_query, limit=limit)

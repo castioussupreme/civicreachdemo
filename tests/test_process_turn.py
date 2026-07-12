@@ -16,6 +16,7 @@ from src.extraction.schema import ExtractionResult
 from src.limits import LONG_MESSAGE_HISTORY_PLACEHOLDER, MESSAGE_TOO_LONG_REPLY
 from src.planner.missing import PlanResult
 from src.process_turn import process_turn
+from src.retrieval.kb import Citation
 from src.state.models import Assessment, AssessmentStatus, EligibilityCase, fresh_case
 
 get_settings.cache_clear()
@@ -139,11 +140,21 @@ def test_happy_path_likely_eligible(stub_llm: Callable[[list[ExtractionResult]],
             ),
         ]
     )
+    cite = Citation(
+        source_id="nc-fns-income-limits",
+        title="Income limits",
+        url=None,
+        snippet="Gross monthly income limits.",
+    )
     case = EligibilityCase()
-    case = process_turn("hi", case).case
-    case = process_turn("I live in North Carolina", case).case
-    case = process_turn("2 people", case).case
-    result = process_turn("3000 monthly", case)
+    with patch(
+        "src.process_turn.retrieve_supporting_policy",
+        return_value=[cite],
+    ):
+        case = process_turn("hi", case).case
+        case = process_turn("I live in North Carolina", case).case
+        case = process_turn("2 people", case).case
+        result = process_turn("3000 monthly", case)
     case = result.case
     assert case.assessment is not None
     assert case.assessment.status == AssessmentStatus.LIKELY_ELIGIBLE
@@ -415,7 +426,14 @@ def test_policy_question_retrieves_context(
             )
         ]
     )
-    result = process_turn("What are the income limits for FNS?", EligibilityCase())
+    cite = Citation(
+        source_id="nc-fns-income-limits",
+        title="Income limits",
+        url=None,
+        snippet="Gross monthly income limits table.",
+    )
+    with patch("src.process_turn.retrieve", return_value=[cite]):
+        result = process_turn("What are the income limits for FNS?", EligibilityCase())
     assert "POLICY:" in result.reply or result.citations
     # Still collecting residency etc.
     assert result.case.assessment is None

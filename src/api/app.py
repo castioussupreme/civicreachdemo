@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated, cast
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 
 from src.api.schemas import (
     ChatRequest,
@@ -16,11 +18,30 @@ from src.api.schemas import (
 )
 from src.config import get_settings
 from src.eligibility.ruleset import RULESET
+from src.openai_errors import OpenAIServiceError
 from src.process_turn import process_turn
+from src.retrieval.index import ensure_index
 from src.session import SessionStoreProtocol, open_session_store
 from src.state.models import OPENING_MESSAGE
 
 logger = logging.getLogger("uvicorn.error")
+
+
+def _halt_process(code: int, *, reason: str) -> None:
+    """
+    Force process exit with the given code.
+
+    Do NOT use SystemExit inside the FastAPI/Starlette lifespan: uvicorn treats
+    lifespan failures as exit code 3, which makes ``restart: on-failure`` loop.
+    os._exit bypasses that and is what Docker actually sees.
+    """
+    logger.error("%s", reason)
+    # Flush logs before hard exit
+    for handler in logging.root.handlers:
+        handler.flush()
+    for handler in logger.handlers:
+        handler.flush()
+    os._exit(code)
 
 
 def _endpoints(base: str) -> dict[str, str]:
@@ -41,6 +62,9 @@ def _resources() -> dict[str, str]:
         "sessions": "redis",
         "redis_url": s.public_redis_url,
         "redis_note": "Dev Redis: no auth. Do not expose publicly.",
+        "retrieval": "qdrant+openai-embeddings",
+        "qdrant_url": s.public_qdrant_url or s.qdrant_url,
+        "embedding_model": s.openai_embedding_model,
     }
 
 
@@ -56,9 +80,11 @@ def _log_banner() -> None:
         f"  OpenAPI docs  {base}/docs",
         f"  Chat API      POST {base}/api/chat",
         f"  Model         {settings.openai_model}",
+        f"  Embeddings    {settings.openai_embedding_model}",
         "  Sessions      redis",
         f"  Redis         {settings.public_redis_url}",
-        "  Redis creds   (none — open dev instance)",
+        f"  Qdrant        {settings.public_qdrant_url or settings.qdrant_url}",
+        "  Retrieval     vector RAG (incremental index)",
         "═" * 56,
         "",
     ]
@@ -82,6 +108,49 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         raise
 
     app.state.store = open_session_store(settings.effective_redis_url())
+    # Vector RAG is required at startup. Exit codes + restart: on-failure:
+    #   0 = permanent (quota/auth) → stay down (no loop)
+    #   1 = transient → Compose may restart
+    try:
+        result = ensure_index()
+    except OpenAIServiceError as exc:
+        # Full provider detail for operators (Docker logs); not sent to clients
+        logger.error("%s", exc.log_message)
+        if exc.raw_detail:
+            logger.error("full provider error: %s", exc.raw_detail)
+        if exc.kind in {"quota", "auth"}:
+            _halt_process(
+                0,
+                reason=(
+                    "Permanent OpenAI billing/config issue — process exit 0 "
+                    "(Docker restart: on-failure will NOT restart). "
+                    "After fixing quota: make up-d"
+                ),
+            )
+        _halt_process(
+            1,
+            reason=(
+                f"Transient OpenAI error building the knowledge index (kind={exc.kind}) "
+                "— process exit 1 (Docker may restart)."
+            ),
+        )
+    except Exception as exc:
+        logger.exception("Unexpected failure building knowledge index")
+        _halt_process(
+            1,
+            reason=(
+                f"Failed to build knowledge index (embeddings/Qdrant): {exc}. "
+                "Process exit 1 (Docker may restart)."
+            ),
+        )
+    if result is not None:
+        logger.info(
+            "Knowledge RAG index: skipped=%s reembedded=%s orphans=%s chunks=%s",
+            result.skipped,
+            result.reembedded,
+            result.orphans_deleted,
+            result.chunks_upserted,
+        )
     _log_banner()
     yield
 
@@ -121,14 +190,31 @@ def chat(
     request: Request,
     body: ChatRequest,
     debug: Annotated[bool, Query()] = False,
-) -> ChatResponse:
+) -> ChatResponse | JSONResponse:
     sessions = _get_store(request)
     session_id = body.session_id or sessions.create()
     case = sessions.get(session_id)
-    result = process_turn(body.message, case)
+    try:
+        result = process_turn(body.message, case)
+    except OpenAIServiceError as exc:
+        # Defense in depth — process_turn usually converts these to a friendly reply.
+        logger.error("%s", exc.log_message)
+        if exc.raw_detail:
+            logger.error("full provider error: %s", exc.raw_detail)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": exc.user_message,
+                "error": "service_unavailable",
+                "session_id": session_id,
+            },
+        )
     sessions.set(session_id, result.case)
 
     assessment_status = result.assessment.status.value if result.assessment is not None else None
+    assessment_payload: dict[str, object] | None = None
+    if result.case.assessment is not None:
+        assessment_payload = dict(result.case.assessment.model_dump())
     # stage/assessment_status are for clients; reply text stays human-facing.
     # Full plan/extract metadata only when ?debug=true.
     debug_payload: dict[str, object] | None = dict(result.debug) if debug else None
@@ -138,6 +224,7 @@ def chat(
         safety_action=result.safety_action,
         stage=result.case.stage.value,
         assessment_status=assessment_status,
+        assessment=assessment_payload,
         debug=debug_payload,
     )
 
@@ -147,7 +234,14 @@ def session_state(request: Request, session_id: str) -> StateResponse:
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id required")
     case = _get_store(request).get(session_id)
-    return StateResponse(session_id=session_id, state=dict(case.known_summary()))
+    assessment_payload: dict[str, object] | None = None
+    if case.assessment is not None:
+        assessment_payload = dict(case.assessment.model_dump())
+    return StateResponse(
+        session_id=session_id,
+        state=dict(case.known_summary()),
+        assessment=assessment_payload,
+    )
 
 
 @app.post("/api/session/{session_id}/reset", response_model=SessionCreateResponse)

@@ -12,6 +12,7 @@ from src.limits import (
     LONG_MESSAGE_HISTORY_PLACEHOLDER,
     MESSAGE_TOO_LONG_REPLY,
 )
+from src.openai_errors import OpenAIServiceError
 from src.planner.missing import determine_missing_fields
 from src.retrieval.kb import Citation, get_by_id, retrieve, retrieve_supporting_policy
 from src.safety.checks import SafetyAction, check_safety, redact_pii
@@ -128,11 +129,15 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
         case.pii_warned = case.pii_warned or safety.action == SafetyAction.PII_WARN
         working_message = safety.redacted_message or history_user
 
-    extraction: ExtractionResult = extract_facts(
-        working_message,
-        case,
-        previous_question=case.last_question,
-    )
+    try:
+        extraction: ExtractionResult = extract_facts(
+            working_message,
+            case,
+            previous_question=case.last_question,
+        )
+    except OpenAIServiceError as exc:
+        return _openai_failure_turn(case, max_chars=max_chars, exc=exc, phase="extract")
+
     case = apply_validated_updates(case, extraction, turn=case.turn_count)
 
     plan = determine_missing_fields(case)
@@ -173,15 +178,29 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
             limit=3,
         )
 
-    reply = compose_response(
-        case=case,
-        plan=plan,
-        assessment=assessment,
-        citations=citations,
-        safety_preamble=safety_preamble,
-        policy_answer_context=policy_context,
-        user_message=working_message,
-    )
+    try:
+        reply = compose_response(
+            case=case,
+            plan=plan,
+            assessment=assessment,
+            citations=citations,
+            safety_preamble=safety_preamble,
+            policy_answer_context=policy_context,
+            user_message=working_message,
+        )
+    except OpenAIServiceError as exc:
+        # State already updated; still tell the user clearly.
+        return _openai_failure_turn(
+            case,
+            max_chars=max_chars,
+            exc=exc,
+            phase="compose",
+            assessment=assessment,
+            citations=citations,
+            extraction=extraction,
+            missing=list(plan.missing_fields),
+        )
+
     case.append_turn("assistant", reply, max_chars=max_chars)
 
     return TurnResult(
@@ -195,6 +214,38 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
             extraction=_extraction_json(extraction),
             missing=list(plan.missing_fields),
         ),
+    )
+
+
+def _openai_failure_turn(
+    case: EligibilityCase,
+    *,
+    max_chars: int,
+    exc: OpenAIServiceError,
+    phase: str,
+    assessment: Assessment | None = None,
+    citations: list[Citation] | None = None,
+    extraction: ExtractionResult | None = None,
+    missing: list[str] | None = None,
+) -> TurnResult:
+    reply = exc.user_message
+    case.append_turn("assistant", reply, max_chars=max_chars)
+    extra: JsonObject = {
+        "stopped": "service_unavailable",
+        "service_kind": exc.kind,
+        "service_phase": phase,
+    }
+    if extraction is not None:
+        extra["extraction"] = _extraction_json(extraction)
+    if missing is not None:
+        extra["missing"] = list(missing)
+    return TurnResult(
+        reply=reply,
+        case=case,
+        safety_action="service_unavailable",
+        assessment=assessment,
+        citations=citations or [],
+        debug=_debug(case, **extra),
     )
 
 

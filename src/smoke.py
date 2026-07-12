@@ -1,11 +1,11 @@
 """
-Live end-to-end smoke: real OpenAI + Redis + happy-path script.
+Live end-to-end smoke via the agent HTTP API (same path as CLI).
 
 Usage:
   make smoke
   poetry run python -m src.smoke
 
-Requires OPENAI_API_KEY and a running stack (make up-d / make dev).
+Requires a running stack (make up-d / make dev) with PUBLIC_BASE_URL in .env.runtime.
 """
 
 from __future__ import annotations
@@ -13,14 +13,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from src.config import ROOT, get_settings
-from src.process_turn import process_turn
-from src.session import open_session_store
-from src.state.models import AssessmentStatus, fresh_case
+from src.api_client import AgentApiClient, AgentApiError
+from src.config import ROOT, resolve_public_api_base
+from src.json_types import JsonObject
+from src.logging_config import configure_client_logging
+from src.state.models import AssessmentStatus
 
 HAPPY_PATH = ROOT / "scripts" / "happy_path.txt"
 
-# Expected outcome for scripts/happy_path.txt (HH=2, $3000/mo gross → under $3526)
 EXPECTED_STATUS = AssessmentStatus.LIKELY_ELIGIBLE
 EXPECTED_HOUSEHOLD = 2
 EXPECTED_MONTHLY = 3000.0
@@ -36,21 +36,12 @@ def _load_script(path: Path) -> list[str]:
 
 
 def run_smoke() -> int:
-    print("==> Smoke: NC FNS happy path (live LLM + Redis)")
+    configure_client_logging(verbose=False)
+    print("==> Smoke: NC FNS happy path (via agent API)")
     try:
-        settings = get_settings()
-    except Exception as exc:
-        print(f"FAIL: configuration — {exc}", file=sys.stderr)
-        print("Set OPENAI_API_KEY in .env", file=sys.stderr)
-        return 1
-
-    try:
-        store = open_session_store(settings.effective_redis_url())
-        sid = store.create()
-        case = store.get(sid)
-    except Exception as exc:
-        print(f"FAIL: Redis — {exc}", file=sys.stderr)
-        print("Start the stack first: make up-d   (or make dev)", file=sys.stderr)
+        base = resolve_public_api_base()
+    except Exception:
+        print("FAIL: API base URL not set. Start the stack (make up-d) first.", file=sys.stderr)
         return 1
 
     if not HAPPY_PATH.is_file():
@@ -62,72 +53,87 @@ def run_smoke() -> int:
         print("FAIL: happy path script is empty", file=sys.stderr)
         return 1
 
-    print(f"    session={sid}  model={settings.openai_model}")
+    print(f"    api={base}")
     print(f"    script={HAPPY_PATH.name}  ({len(lines)} turns)")
     print()
 
-    # Start from a clean case with opening already present
-    case = fresh_case()
-    store.set(sid, case)
-
-    for i, line in enumerate(lines, start=1):
-        print(f"  [{i}/{len(lines)}] You> {line}")
+    with AgentApiClient(base) as api:
         try:
-            result = process_turn(line, case)
-        except Exception as exc:
-            print(f"FAIL: process_turn error — {exc}", file=sys.stderr)
+            api.health()
+            sid, _opening = api.create_session()
+        except AgentApiError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
             return 1
-        case = result.case
-        store.set(sid, case)
-        preview = result.reply.replace("\n", " ")
-        if len(preview) > 120:
-            preview = preview[:117] + "..."
-        print(f"         Assistant> {preview}")
 
-    assessment = case.assessment
-    if assessment is None:
+        print(f"    session={sid}")
         print()
-        print("FAIL: no assessment after happy path (still collecting?)", file=sys.stderr)
-        print(f"    stage={case.stage.value} missing={case.last_missing_fields}", file=sys.stderr)
+
+        last: JsonObject = {}
+        for i, line in enumerate(lines, start=1):
+            print(f"  [{i}/{len(lines)}] You> {line}")
+            try:
+                last = api.chat(line, session_id=sid)
+            except AgentApiError as exc:
+                print(f"         Assistant> {exc}")
+                print()
+                print("FAIL: chat request failed", file=sys.stderr)
+                return 1
+            sid = str(last.get("session_id") or sid)
+            reply = str(last.get("reply") or "")
+            preview = reply.replace("\n", " ")
+            if len(preview) > 120:
+                preview = preview[:117] + "..."
+            print(f"         Assistant> {preview}")
+
+        assessment = last.get("assessment")
+        if not isinstance(assessment, dict):
+            print()
+            print("FAIL: no assessment after happy path (still collecting?)", file=sys.stderr)
+            print(f"    stage={last.get('stage')}", file=sys.stderr)
+            return 1
+
+        status = str(assessment.get("status") or "")
+        household = assessment.get("household_size")
+        monthly = assessment.get("normalized_gross_monthly")
+        threshold = assessment.get("threshold_used")
+
+        print()
+        print(f"    assessment: {status}")
+        print(f"    household:  {household}")
+        print(f"    monthly:    {monthly}")
+        print(f"    threshold:  {threshold}")
+
+        ok = True
+        if status != EXPECTED_STATUS.value:
+            print(
+                f"FAIL: expected status {EXPECTED_STATUS.value}, got {status}",
+                file=sys.stderr,
+            )
+            ok = False
+        if household != EXPECTED_HOUSEHOLD:
+            print(
+                f"FAIL: expected household_size {EXPECTED_HOUSEHOLD}, got {household}",
+                file=sys.stderr,
+            )
+            ok = False
+        if monthly != EXPECTED_MONTHLY:
+            print(
+                f"FAIL: expected monthly {EXPECTED_MONTHLY}, got {monthly}",
+                file=sys.stderr,
+            )
+            ok = False
+        if threshold != EXPECTED_THRESHOLD:
+            print(
+                f"FAIL: expected threshold {EXPECTED_THRESHOLD}, got {threshold}",
+                file=sys.stderr,
+            )
+            ok = False
+
+        if ok:
+            print()
+            print("PASS: smoke happy path completed with expected screening result.")
+            return 0
         return 1
-
-    print()
-    print(f"    assessment: {assessment.status.value}")
-    print(f"    household:  {assessment.household_size}")
-    print(f"    monthly:    {assessment.normalized_gross_monthly}")
-    print(f"    threshold:  {assessment.threshold_used}")
-
-    ok = True
-    if assessment.status != EXPECTED_STATUS:
-        print(
-            f"FAIL: expected status {EXPECTED_STATUS.value}, got {assessment.status.value}",
-            file=sys.stderr,
-        )
-        ok = False
-    if assessment.household_size != EXPECTED_HOUSEHOLD:
-        print(
-            f"FAIL: expected household_size {EXPECTED_HOUSEHOLD}, got {assessment.household_size}",
-            file=sys.stderr,
-        )
-        ok = False
-    if assessment.normalized_gross_monthly != EXPECTED_MONTHLY:
-        print(
-            f"FAIL: expected monthly {EXPECTED_MONTHLY}, got {assessment.normalized_gross_monthly}",
-            file=sys.stderr,
-        )
-        ok = False
-    if assessment.threshold_used != EXPECTED_THRESHOLD:
-        print(
-            f"FAIL: expected threshold {EXPECTED_THRESHOLD}, got {assessment.threshold_used}",
-            file=sys.stderr,
-        )
-        ok = False
-
-    if ok:
-        print()
-        print("PASS: smoke happy path completed with expected screening result.")
-        return 0
-    return 1
 
 
 def main() -> None:

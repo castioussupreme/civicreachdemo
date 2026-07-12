@@ -16,6 +16,8 @@ rich = ">=13.7.0"
 fastapi = ">=0.115.0"
 uvicorn = { version = ">=0.30.0", extras = ["standard"] }
 redis = ">=5.0.0"
+qdrant-client = "1.15.1"
+httpx = "^0.28.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0.0"
@@ -46,11 +48,13 @@ line-length = 100
 src = ["src", "tests"]
 
 [tool.ruff.lint]
+# Imports: top of file only (PEP 8). E402 = module-level import after non-import
+# code; PLC0415 = import inside a function/class (never lazy-import for style).
 select = [
-    "E",
+    "E",       # pycodestyle errors (incl. E402)
     "W",
     "F",
-    "I",
+    "I",       # isort — top-level import order
     "B",
     "UP",
     "SIM",
@@ -60,7 +64,8 @@ select = [
     "T20",
     "ARG",
     "ERA",
-    "PLC",
+    "PLC",     # pylint convention (incl. PLC0415 import-outside-top-level)
+    "PLC0415", # explicit: imports must be at module top level, not nested
     "PLE",
     "PLW",
     "ANN",
@@ -79,7 +84,7 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 files = ["src"]
 strict = true
 warn_return_any = true
@@ -98,6 +103,18 @@ plugins = ["pydantic.mypy"]
 mypy_path = "."
 namespace_packages = true
 explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = [
+    "qdrant_client.*",
+    "grpc.*",
+    "numpy.*",
+    "portalocker.*",
+    "h2.*",
+    "hyperframe.*",
+    "hpack.*",
+]
+ignore_missing_imports = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true

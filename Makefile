@@ -3,7 +3,7 @@
 #
 # Other targets: install | up | down | cli | smoke | test | hooks | lint
 
-.PHONY: dev install up up-d down cli smoke test hooks lint
+.PHONY: dev install up up-d down cli smoke index test hooks lint
 
 POETRY ?= poetry
 export POETRY_VIRTUALENVS_IN_PROJECT := true
@@ -43,15 +43,20 @@ down:
 		docker compose down; \
 	fi
 
-# Interactive CLI (needs Redis from 'make dev' / 'make up' in another terminal).
+# Interactive CLI talks to the agent HTTP API (PUBLIC_BASE_URL from .env.runtime).
 cli: install
-	@echo "==> Connecting CLI to Redis (host URL from .env.runtime / PUBLIC_REDIS_URL)…"
+	@echo "==> CLI → agent API (PUBLIC_BASE_URL from .env.runtime)…"
 	$(POETRY) run python -m src.cli
 
-# Live E2E: real OpenAI + Redis + scripts/happy_path.txt (stack must be up).
+# Live E2E via agent API + scripts/happy_path.txt (stack must be up).
 smoke: install
-	@echo "==> Smoke test (OPENAI_API_KEY + Redis required)…"
+	@echo "==> Smoke test via agent API (stack must be up)…"
 	$(POETRY) run python -m src.smoke
+
+# Re-sync knowledge embeddings into Qdrant (only changed docs re-embedded).
+index: install
+	@echo "==> Syncing knowledge index → Qdrant…"
+	$(POETRY) run python -c "from src.retrieval.index import reset_index_flag, sync_knowledge_index; reset_index_flag(); r=sync_knowledge_index(); print(r)"
 
 test: install
 	$(POETRY) run pytest -q

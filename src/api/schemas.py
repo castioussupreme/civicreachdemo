@@ -33,9 +33,12 @@ class ChatResponse(BaseModel):
     safety_action: str
     stage: str
     assessment_status: str | None = None
+    # Full assessment for clients (e.g. CLI /why card); null while still collecting
+    assessment: dict[str, object] | None = None
     debug: dict[str, object] | None = None
 
 
 class StateResponse(BaseModel):
     session_id: str
     state: dict[str, object]
+    assessment: dict[str, object] | None = None

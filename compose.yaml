@@ -1,0 +1,44 @@
+# Docker Compose: agent API + optional embedded Redis.
+# Prefer: ./start
+#   - no REDIS_URL → spawns Redis (profile embedded-redis)
+#   - REDIS_URL set → uses that Redis (no Redis container)
+
+name: civicreach-fns
+
+services:
+  redis:
+    profiles: ["embedded-redis"]
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-0}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${AGENT_PORT}:8000"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      # Client URL inside the stack (embedded service name, or host.docker.internal/external)
+      REDIS_URL: ${REDIS_URL}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      PUBLIC_REDIS_URL: ${PUBLIC_REDIS_URL}
+    depends_on:
+      redis:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+
+volumes:
+  redis_data:

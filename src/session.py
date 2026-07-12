@@ -1,0 +1,58 @@
+"""Redis-backed conversation sessions (session_id → EligibilityCase)."""
+
+from __future__ import annotations
+
+import uuid
+from typing import Protocol
+
+import redis
+
+from src.state.models import EligibilityCase
+
+
+class SessionStoreProtocol(Protocol):
+    def create(self) -> str: ...
+
+    def get(self, session_id: str) -> EligibilityCase: ...
+
+    def set(self, session_id: str, case: EligibilityCase) -> None: ...
+
+    def reset(self, session_id: str) -> EligibilityCase: ...
+
+
+class SessionStore:
+    """Persist cases in Redis (JSON, TTL)."""
+
+    def __init__(self, redis_url: str) -> None:
+        self._client = redis.Redis.from_url(redis_url, decode_responses=True)
+        self._prefix = "fns:case:"
+        self._ttl_seconds = 60 * 60 * 24  # 24h
+
+    def create(self) -> str:
+        sid = str(uuid.uuid4())[:8]
+        self.set(sid, EligibilityCase())
+        return sid
+
+    def get(self, session_id: str) -> EligibilityCase:
+        raw = self._client.get(self._prefix + session_id)
+        if raw is None:
+            case = EligibilityCase()
+            self.set(session_id, case)
+            return case
+        return EligibilityCase.model_validate_json(raw)
+
+    def set(self, session_id: str, case: EligibilityCase) -> None:
+        self._client.set(
+            self._prefix + session_id,
+            case.model_dump_json(),
+            ex=self._ttl_seconds,
+        )
+
+    def reset(self, session_id: str) -> EligibilityCase:
+        case = EligibilityCase()
+        self.set(session_id, case)
+        return case
+
+
+def open_session_store(redis_url: str) -> SessionStore:
+    return SessionStore(redis_url)

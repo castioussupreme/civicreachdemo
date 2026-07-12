@@ -1,44 +1,42 @@
-[project]
+[tool.poetry]
 name = "nc-fns-eligibility-agent"
 version = "0.1.0"
 description = "POC AI eligibility screening agent for NC FNS (SNAP)"
+authors = ["CivicReach Demo"]
 readme = "README.md"
-requires-python = ">=3.11"
-dependencies = [
-    "openai>=1.40.0",
-    "pydantic>=2.7.0",
-    "pydantic-settings>=2.3.0",
-    "python-dotenv>=1.0.0",
-    "rich>=13.7.0",
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.30.0",
-    "redis>=5.0.0",
-]
+packages = [{ include = "src" }]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.0.0",
-    "httpx>=0.27.0",
-    "pre-commit>=3.7.0",
-    "ruff>=0.12.0",
-    "mypy>=1.10.0",
-    "vulture>=2.11",
-]
+[tool.poetry.dependencies]
+python = "^3.11"
+openai = ">=1.40.0"
+pydantic = ">=2.7.0"
+pydantic-settings = ">=2.3.0"
+python-dotenv = ">=1.0.0"
+rich = ">=13.7.0"
+fastapi = ">=0.115.0"
+uvicorn = { version = ">=0.30.0", extras = ["standard"] }
+redis = ">=5.0.0"
 
-[project.scripts]
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0.0"
+httpx = ">=0.27.0"
+pre-commit = ">=3.7.0"
+ruff = ">=0.12.0"
+mypy = ">=1.10.0"
+vulture = ">=2.11"
+
+[tool.poetry.scripts]
 fns-agent = "src.cli:main"
+
+[build-system]
+requires = ["poetry-core>=1.7.0"]
+build-backend = "poetry.core.masonry.api"
+
+# --- App / test runtime ---
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["src*"]
 
 # --- Quality gates (pre-commit / CI) ---
 
@@ -49,32 +47,30 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = [
-    "E",      # pycodestyle errors
-    "W",      # pycodestyle warnings
-    "F",      # pyflakes (unused imports/vars)
-    "I",      # isort
-    "B",      # bugbear
-    "UP",     # pyupgrade
-    "SIM",    # simplify
-    "RUF",    # ruff-specific
-    "N",      # pep8-naming
-    "PTH",    # pathlib
-    "T20",    # no print (use logging/rich)
-    "ARG",    # unused function args
-    "ERA",    # commented-out (dead) code
-    "PLC",    # pylint convention
-    "PLE",    # pylint error
-    "PLW",    # pylint warning
-    "ANN",    # type annotations
+    "E",
+    "W",
+    "F",
+    "I",
+    "B",
+    "UP",
+    "SIM",
+    "RUF",
+    "N",
+    "PTH",
+    "T20",
+    "ARG",
+    "ERA",
+    "PLC",
+    "PLE",
+    "PLW",
+    "ANN",
 ]
 ignore = [
-    "E501",   # line length handled by formatter
+    "E501",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests may omit full annotation coverage; still ban Any (ANN401 not ignored).
 "tests/**" = ["T20", "ARG", "PLR", "ANN001", "ANN201", "ANN202", "ANN204"]
-# CLI launcher (stdlib-only) — prints operator URLs by design.
 "start.py" = ["T20", "ANN"]
 
 [tool.ruff.format]

@@ -8,7 +8,8 @@ from src.config import Settings, get_settings
 
 
 def test_requires_openai_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    # Empty env wins over .env file values
+    monkeypatch.setenv("OPENAI_API_KEY", "")
     get_settings.cache_clear()
     with pytest.raises(ValidationError):
         Settings()  # type: ignore[call-arg]

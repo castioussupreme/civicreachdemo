@@ -1,0 +1,21 @@
+.venv
+venv
+.git
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.pre-commit
+**/__pycache__
+*.py[cod]
+*.egg-info
+dist
+build
+.env
+sessions
+.DS_Store
+nc_fns_eligibility_agent.egg-info
+Engineering Case Study.md
+scripts
+tests
+setup-hooks
+start

@@ -20,6 +20,7 @@ In a **second terminal** (stack must stay up):
 
 ```bash
 make cli               # interactive chat
+make smoke             # live happy-path E2E (real LLM + Redis)
 # or scripted demos:
 poetry run python -m src.cli --script scripts/happy_path.txt
 poetry run python -m src.cli --script scripts/adversarial.txt
@@ -31,8 +32,11 @@ poetry run python -m src.cli --script scripts/adversarial.txt
 | `make up` / `make up-d` | Start stack only (foreground / detached)     |
 | `make down`             | Stop Compose                                 |
 | `make cli`              | Interactive CLI (needs Redis from the stack) |
-| `make test`             | Pytest (107 deterministic unit tests)        |
+| `make smoke`            | Live happy-path E2E (OpenAI + Redis)         |
+| `make test`             | Pytest (deterministic unit tests)            |
 | `make lint`             | ruff + mypy + vulture                        |
+
+**CLI tips:** chat normally; after a result use `/why` for the code-owned screening card. `/debug on` shows stage/extract metadata.
 
 | Resource    | Where                                                |
 | ----------- | ---------------------------------------------------- |

@@ -1,9 +1,9 @@
 # pnpm-dev equivalent for this stack:
 #   make dev    → install deps + start API/Redis (Docker Compose)
 #
-# Other targets: install | up | down | cli | test | hooks | lint
+# Other targets: install | up | down | cli | smoke | test | hooks | lint
 
-.PHONY: dev install up up-d down cli test hooks lint
+.PHONY: dev install up up-d down cli smoke test hooks lint
 
 POETRY ?= poetry
 export POETRY_VIRTUALENVS_IN_PROJECT := true
@@ -47,6 +47,11 @@ down:
 cli: install
 	@echo "==> Connecting CLI to Redis (host URL from .env.runtime / PUBLIC_REDIS_URL)…"
 	$(POETRY) run python -m src.cli
+
+# Live E2E: real OpenAI + Redis + scripts/happy_path.txt (stack must be up).
+smoke: install
+	@echo "==> Smoke test (OPENAI_API_KEY + Redis required)…"
+	$(POETRY) run python -m src.smoke
 
 test: install
 	$(POETRY) run pytest -q

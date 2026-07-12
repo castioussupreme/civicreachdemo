@@ -1,6 +1,7 @@
 # Happy path — multi-turn user utterances for live LLM (OPENAI_API_KEY required)
 # Run: poetry run python -m src.cli --script scripts/happy_path.txt
+# Smoke expects: HH=2, $3000/mo gross → likely eligible (threshold $3526)
 Hi, I want to know if I might qualify for food assistance in North Carolina
 Yes, I live in NC
 There are two of us who buy and cook food together
-We make about $3,000 a month before taxes, total for the household
+We make $3000 a month before taxes, total for the household

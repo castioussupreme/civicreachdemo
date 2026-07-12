@@ -8,24 +8,72 @@ from pathlib import Path
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.table import Table
 
+from src.cli_display import format_assessment_card, should_show_assessment_card
 from src.config import get_settings
-from src.process_turn import process_turn
+from src.process_turn import TurnResult, process_turn
+from src.retrieval.kb import Citation
 from src.session import SessionStoreProtocol, open_session_store
-from src.state.models import OPENING_MESSAGE, EligibilityCase
+from src.state.models import OPENING_MESSAGE, Assessment, EligibilityCase
 
 console = Console()
 
 
-HELP = """
-[dim]Casual NC FNS (food assistance) screen — not official. No SSN needed.
-Commands: /quit  /reset  /state  /debug on|off[/dim]
-"""
+HELP = """[dim]NC FNS informal food-assistance screen — not official. No SSN needed.
+Commands: /quit  /reset  /state  /why  /debug on|off[/dim]"""
 
 
-def _print_assistant(text: str) -> None:
+def _print_assistant(
+    text: str,
+    *,
+    assessment: Assessment | None = None,
+    citations: list[Citation] | None = None,
+) -> None:
     console.print()
     console.print(Panel(Markdown(text), title="Assistant", border_style="green"))
+    if should_show_assessment_card(assessment) and assessment is not None:
+        card = format_assessment_card(assessment, citations=citations)
+        console.print(Panel(card, title="Screening summary (code-owned)", border_style="cyan"))
+
+
+def _print_why(case: EligibilityCase) -> None:
+    if case.assessment is None:
+        console.print(
+            "[dim]No screening result yet — keep chatting until we have enough to assess.[/dim]"
+        )
+        return
+    card = format_assessment_card(case.assessment)
+    console.print(Panel(card, title="/why — last screening summary", border_style="cyan"))
+
+
+def _print_turn_result(result: TurnResult, *, debug: bool) -> None:
+    _print_assistant(
+        result.reply,
+        assessment=result.assessment if should_show_assessment_card(result.assessment) else None,
+        citations=list(result.citations) if result.citations else None,
+    )
+    # Prefer case.assessment after terminal turn (persisted)
+    if (
+        result.assessment is None
+        and should_show_assessment_card(result.case.assessment)
+        and result.case.assessment is not None
+    ):
+        console.print(
+            Panel(
+                format_assessment_card(result.case.assessment),
+                title="Screening summary (code-owned)",
+                border_style="cyan",
+            )
+        )
+    if debug:
+        console.print(
+            Panel(
+                json.dumps(result.debug, indent=2, default=str),
+                title="Debug (not shown to end users)",
+                border_style="dim",
+            )
+        )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -66,13 +114,13 @@ def main(argv: list[str] | None = None) -> None:
     debug = args.debug
 
     console.print(HELP)
+    meta = Table.grid(padding=(0, 2))
+    meta.add_row("[dim]session[/dim]", f"[dim]{sid}[/dim]")
     if debug:
-        console.print(
-            f"[dim]session={sid} model={settings.openai_model} "
-            f"redis={settings.public_redis_url}[/dim]"
-        )
+        meta.add_row("[dim]model[/dim]", f"[dim]{settings.openai_model}[/dim]")
+        meta.add_row("[dim]redis[/dim]", f"[dim]{settings.public_redis_url}[/dim]")
+    console.print(meta)
 
-    # Opening line is part of the conversation (also stored on the case).
     opening = case.recent_turns[0].text if case.recent_turns else OPENING_MESSAGE
     _print_assistant(opening)
 
@@ -100,6 +148,9 @@ def main(argv: list[str] | None = None) -> None:
         if user.lower() == "/state":
             console.print_json(json.dumps(case.known_summary(), default=str))
             continue
+        if user.lower() in {"/why", "/summary"}:
+            _print_why(case)
+            continue
         if user.lower() == "/debug on":
             debug = True
             console.print("Debug on — stage and plan will show after each reply.")
@@ -112,16 +163,7 @@ def main(argv: list[str] | None = None) -> None:
         result = process_turn(user, case)
         case = result.case
         store.set(sid, case)
-
-        _print_assistant(result.reply)
-        if debug:
-            console.print(
-                Panel(
-                    json.dumps(result.debug, indent=2, default=str),
-                    title="Debug (not shown to end users)",
-                    border_style="dim",
-                )
-            )
+        _print_turn_result(result, debug=debug)
 
 
 def _run_script(
@@ -141,15 +183,7 @@ def _run_script(
         result = process_turn(line, case)
         case = result.case
         store.set(sid, case)
-        _print_assistant(result.reply)
-        if debug:
-            console.print(
-                Panel(
-                    json.dumps(result.debug, indent=2, default=str),
-                    title="Debug (not shown to end users)",
-                    border_style="dim",
-                )
-            )
+        _print_turn_result(result, debug=debug)
 
 
 if __name__ == "__main__":

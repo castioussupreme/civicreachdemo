@@ -29,7 +29,7 @@ from src.programs.registry import (
     catalog_programs,
     resolve_ruleset,
 )
-from src.retrieval.index import ensure_index
+from src.retrieval.index import ensure_index, format_sync_summary
 from src.retrieval.kb import public_citation_dicts
 from src.session import SessionNotFoundError, SessionStoreProtocol, open_session_store
 
@@ -154,13 +154,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             ),
         )
     if result is not None:
-        logger.info(
-            "Knowledge RAG index: skipped=%s reembedded=%s orphans=%s chunks=%s",
-            result.skipped,
-            result.reembedded,
-            result.orphans_deleted,
-            result.chunks_upserted,
-        )
+        logger.info("%s", format_sync_summary(result))
     _log_banner()
     yield
 

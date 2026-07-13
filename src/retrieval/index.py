@@ -39,7 +39,7 @@ class _IndexState:
 class SyncResult:
     skipped: int
     reembedded: int
-    orphans_deleted: int
+    deleted: int  # removed from Qdrant (orphan ids + missing expected files)
     chunks_upserted: int
 
 
@@ -53,12 +53,22 @@ def index_degraded_message() -> str | None:
     return None
 
 
+def format_sync_summary(result: SyncResult) -> str:
+    """One-line operator summary (startup / make index). Always includes deleted=."""
+    return (
+        f"Knowledge RAG index: skipped={result.skipped} reembedded={result.reembedded} "
+        f"deleted={result.deleted} chunks={result.chunks_upserted}"
+    )
+
+
 def sync_knowledge_index(*, force: bool = False) -> SyncResult:
     """
     Ensure Qdrant reflects all enabled program knowledge packs.
 
     Only re-embeds documents whose content hash changed.
     Points are tagged with program_slug for pre-filter isolation.
+    Sources missing from disk or removed from the manifest are deleted from Qdrant
+    and counted in ``deleted``.
     """
     settings = get_settings()
     client = make_client(settings.effective_qdrant_url())
@@ -68,18 +78,33 @@ def sync_knowledge_index(*, force: bool = False) -> SyncResult:
     skipped = 0
     reembedded = 0
     chunks_upserted = 0
-    orphans_deleted = 0
+    deleted = 0
 
     for slug in list_enabled_slugs():
         try:
-            get_program(slug)
+            program = get_program(slug)
         except Exception:
             logger.warning("Skipping index for missing pack %s", slug)
             continue
+        knowledge_dir = program.knowledge_dir
         docs = load_corpus(slug)
-        manifest_ids = {d.id for d in docs}
+        # Sources that still exist on disk and remain in the pack corpus
+        present_ids: set[str] = set()
         to_embed: list[tuple[SourceDoc, str]] = []
+
         for doc in docs:
+            path = knowledge_dir / doc.file
+            if not path.is_file():
+                # Expected (manifest) but not on disk — drop from index if present
+                logger.warning(
+                    "Knowledge file missing program=%s source_id=%s file=%s — "
+                    "will delete from index if stored",
+                    slug,
+                    doc.id,
+                    doc.file,
+                )
+                continue
+            present_ids.add(doc.id)
             digest = content_hash(doc.id, doc.text)
             if not force and source_hash_in_store(client, doc.id, digest, program_slug=slug):
                 skipped += 1
@@ -128,26 +153,25 @@ def sync_knowledge_index(*, force: bool = False) -> SyncResult:
                 len(parts),
             )
 
+        # Anything still in Qdrant for this pack but not present on disk / in corpus
         indexed = list_indexed_source_ids(client, program_slug=slug)
-        orphans = indexed - manifest_ids
-        for orphan_id in orphans:
-            delete_source(client, orphan_id, program_slug=slug)
-            orphans_deleted += 1
-            logger.info("Deleted orphan program=%s source_id=%s", slug, orphan_id)
+        stale = indexed - present_ids
+        for source_id in sorted(stale):
+            delete_source(client, source_id, program_slug=slug)
+            deleted += 1
+            logger.info(
+                "Deleted from index program=%s source_id=%s (missing file or removed from pack)",
+                slug,
+                source_id,
+            )
 
     result = SyncResult(
         skipped=skipped,
         reembedded=reembedded,
-        orphans_deleted=orphans_deleted,
+        deleted=deleted,
         chunks_upserted=chunks_upserted,
     )
-    logger.info(
-        "Knowledge index sync complete: skipped=%s reembedded=%s orphans=%s chunks=%s",
-        result.skipped,
-        result.reembedded,
-        result.orphans_deleted,
-        result.chunks_upserted,
-    )
+    logger.info("%s", format_sync_summary(result))
     return result
 
 

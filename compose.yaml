@@ -3,7 +3,7 @@
 #   - no REDIS_URL → spawns Redis (profile embedded-redis)
 #   - no QDRANT_URL → spawns Qdrant (profile embedded-qdrant)
 
-name: civicreach-fns
+name: civicreach
 
 services:
   redis:

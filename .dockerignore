@@ -11,11 +11,13 @@ venv
 dist
 build
 .env
+.env.runtime
 sessions
 .DS_Store
-nc_fns_eligibility_agent.egg-info
+*.egg-info
 Engineering Case Study.md
-scripts
 tests
-setup-hooks
-start
+# Host-only tooling (not needed in the agent image)
+start.py
+Makefile
+.pre-commit-config.yaml

@@ -29,6 +29,15 @@ from urllib.parse import urlparse, urlunparse
 
 ROOT = Path(__file__).resolve().parent
 
+# Paths the agent image and runtime need (fail fast with a clear message).
+_REQUIRED_PATHS = (
+    ROOT / "Dockerfile",
+    ROOT / "compose.yaml",
+    ROOT / "pyproject.toml",
+    ROOT / "src",
+    ROOT / "programs" / "registry.yaml",
+)
+
 
 def _load_dotenv(path: Path) -> None:
     """Minimal .env loader (stdlib only — runs before any venv)."""
@@ -85,6 +94,37 @@ def _docker_reachable_url(url: str, *, default_scheme_port: int | None = None) -
     return urlunparse(parsed._replace(netloc=netloc))
 
 
+def _preflight() -> list[str]:
+    """Return human-readable errors if the repo is not ready to build/run."""
+    errors: list[str] = []
+    for path in _REQUIRED_PATHS:
+        if not path.exists():
+            errors.append(f"missing required path: {path.relative_to(ROOT)}")
+
+    programs = ROOT / "programs"
+    if programs.is_dir():
+        packs = [p for p in programs.iterdir() if p.is_dir() and (p / "program.yaml").is_file()]
+        if not packs:
+            errors.append(
+                "programs/ has no packs with program.yaml "
+                "(expected e.g. programs/nc-fns/program.yaml)"
+            )
+        for pack in packs:
+            if not (pack / "rules").is_dir() or not any((pack / "rules").glob("*.yaml")):
+                errors.append(f"program pack {pack.name}: no rules/*.yaml")
+            if not (pack / "knowledge" / "manifest.json").is_file():
+                errors.append(f"program pack {pack.name}: missing knowledge/manifest.json")
+
+    # Stale layout (pre multi-program) that breaks Docker COPY if still referenced
+    if (ROOT / "knowledge").exists() and not any((ROOT / "programs").glob("*/knowledge")):
+        errors.append(
+            "top-level knowledge/ found but no programs/*/knowledge — "
+            "packs should live under programs/{slug}/"
+        )
+
+    return errors
+
+
 def main(argv: list[str]) -> int:
     _load_dotenv(ROOT / ".env")
 
@@ -99,6 +139,18 @@ def main(argv: list[str]) -> int:
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("Docker Compose v2 is required (`docker compose`).", file=sys.stderr)
+        return 1
+
+    preflight_errors = _preflight()
+    if preflight_errors:
+        print("Repo is not ready to start the stack:", file=sys.stderr)
+        for err in preflight_errors:
+            print(f"  • {err}", file=sys.stderr)
+        print(
+            "\nPolicy packs live under programs/{slug}/ (rules + knowledge). "
+            "The agent image COPYs programs/ — not a top-level knowledge/ directory.",
+            file=sys.stderr,
+        )
         return 1
 
     if not os.environ.get("OPENAI_API_KEY", "").strip():
@@ -175,7 +227,6 @@ def main(argv: list[str]) -> int:
         and not detached
         and "--abort-on-container-exit" not in compose_args
     ):
-        # Insert after "up" so flags stay valid
         compose_args = [
             "up",
             "--abort-on-container-exit",
@@ -184,13 +235,21 @@ def main(argv: list[str]) -> int:
             *compose_args[1:],
         ]
 
+    pack_names = sorted(
+        p.name
+        for p in (ROOT / "programs").iterdir()
+        if p.is_dir() and (p / "program.yaml").is_file()
+    )
+
     print("Starting stack with Docker Compose…")
     print()
     print("Host ports / resources")
     print(f"  API health    {public_base}/api/health")
     print(f"  OpenAPI docs  {public_base}/docs")
+    print(f"  Programs API  GET {public_base}/api/programs")
     print(f"  Chat API      POST {public_base}/api/chat")
     print(f"  Agent port    {agent_port}  (set AGENT_PORT to pin)")
+    print(f"  Packs         {', '.join(pack_names) or '(none)'}")
     if spawn_redis:
         print(f"  Redis         {public_redis}  (embedded; set REDIS_PORT to pin)")
         print("  Redis mode    spawned by Compose (profile: embedded-redis)")
@@ -205,7 +264,8 @@ def main(argv: list[str]) -> int:
         print(f"  Qdrant        {public_qdrant}  (external; not spawned)")
         print(f"  Qdrant (agent) {agent_qdrant}")
     print(f"  Embeddings    {embed_model}  (same OPENAI_API_KEY as chat)")
-    print("  CLI           make cli  (uses PUBLIC_REDIS_URL + PUBLIC_QDRANT_URL)")
+    print("  CLI           make cli  (pick program; uses PUBLIC_BASE_URL)")
+    print("  Smoke         make smoke PROGRAM=<slug>")
     if not detached and compose_args[0] == "up":
         print("  Foreground    aborts when agent exits (Make returns to the shell)")
     print()

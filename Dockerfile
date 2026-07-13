@@ -1,4 +1,4 @@
-# NC FNS eligibility agent — production-oriented image
+# Public benefits eligibility agent — production-oriented image
 FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -13,9 +13,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
+# App package + program packs (rules, knowledge, smoke). Paths must match
+# src.programs.registry PROGRAMS_DIR = <repo-root>/programs.
 COPY pyproject.toml README.md ./
 COPY src ./src
-COPY knowledge ./knowledge
+COPY programs ./programs
 
 RUN pip install --upgrade pip \
     && pip install .

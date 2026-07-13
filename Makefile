@@ -1,51 +1,61 @@
-# pnpm-dev equivalent for this stack:
-#   make dev    → install deps + start API/Redis (Docker Compose)
+# Public benefits eligibility agent
+#   make dev              → install host deps + start API/Redis/Qdrant (Compose)
+#   make smoke PROGRAM=…  → live multi-scenario E2E (PROGRAM required)
 #
-# Other targets: install | up | down | cli | smoke | test | hooks | lint
+# Other targets: install | up | up-d | down | cli | index | test | hooks | lint
 
-.PHONY: dev install up up-d down cli smoke index test hooks lint
+.PHONY: dev install up up-d down cli smoke index test hooks lint docker-check
 
 POETRY ?= poetry
 export POETRY_VIRTUALENVS_IN_PROJECT := true
 
-# Default: install everything, then run the full stack (Compose + optional Redis).
-dev: install
-	@echo ""
-	@echo "==> Starting stack (Docker Compose via start.py)…"
-	@echo "    Set OPENAI_API_KEY in .env first if you have not already."
-	@echo ""
-	$(POETRY) run python start.py
-
-# Install host Python deps (CLI, tests, hooks). Docker image installs its own.
+# Host Python deps only (no Docker). Safe for test/lint on machines without Docker.
 install:
 	@command -v $(POETRY) >/dev/null 2>&1 || { \
 		echo "Poetry is required. Install: https://python-poetry.org/docs/#installation"; \
 		exit 1; \
 	}
+	$(POETRY) install --with dev
+	@echo "==> Python deps ready (poetry env in .venv)."
+
+docker-check:
 	@command -v docker >/dev/null 2>&1 || { \
 		echo "Docker is required for 'make dev' / 'make up'."; \
 		exit 1; \
 	}
-	$(POETRY) install --with dev
-	@echo "==> Python deps ready (poetry env in .venv)."
+	@docker compose version >/dev/null 2>&1 || { \
+		echo "Docker Compose v2 is required (\`docker compose\`)."; \
+		exit 1; \
+	}
 
-# Start stack only (assumes install already ran).
-up:
+# Default: install host deps, then run the full stack (Compose + optional Redis/Qdrant).
+dev: install docker-check
+	@echo ""
+	@echo "==> Starting stack (Docker Compose via start.py)…"
+	@echo "    Set OPENAI_API_KEY in .env first if you have not already."
+	@echo "    Program packs are under programs/{slug}/ (not top-level knowledge/)."
+	@echo ""
 	$(POETRY) run python start.py
 
-up-d:
+# Start stack only (assumes install already ran).
+up: docker-check
+	$(POETRY) run python start.py
+
+up-d: docker-check
 	$(POETRY) run python start.py -d
 
 down:
 	@if [ -f .env.runtime ]; then \
-		docker compose --env-file .env.runtime down; \
+		docker compose --env-file .env.runtime --profile embedded-redis --profile embedded-qdrant down; \
 	else \
-		docker compose down; \
+		docker compose --profile embedded-redis --profile embedded-qdrant down 2>/dev/null \
+			|| docker compose down; \
 	fi
 
 # Interactive CLI talks to the agent HTTP API (PUBLIC_BASE_URL from .env.runtime).
 cli: install
 	@echo "==> CLI → agent API (PUBLIC_BASE_URL from .env.runtime)…"
+	@echo "    Pick a program interactively, or: poetry run python -m src.cli --program nc-fns"
 	$(POETRY) run python -m src.cli
 
 # Live E2E via agent API (stack must be up). PROGRAM is required (no default).
@@ -56,9 +66,9 @@ smoke: install
 	@echo "==> Smoke (multi-scenario) via agent API program=$(PROGRAM)…"
 	$(POETRY) run python -m src.smoke --program $(PROGRAM)
 
-# Re-sync knowledge embeddings into Qdrant (only changed docs re-embedded).
+# Re-sync knowledge embeddings into Qdrant (all packs; unchanged docs skipped).
 index: install
-	@echo "==> Syncing knowledge index → Qdrant…"
+	@echo "==> Syncing knowledge index → Qdrant (all programs/* packs)…"
 	$(POETRY) run python -c "from src.retrieval.index import reset_index_flag, sync_knowledge_index; reset_index_flag(); r=sync_knowledge_index(); print(r)"
 
 test: install

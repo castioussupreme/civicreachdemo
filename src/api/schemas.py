@@ -35,6 +35,8 @@ class ChatResponse(BaseModel):
     assessment_status: str | None = None
     # Full assessment for clients (e.g. CLI /why card); null while still collecting
     assessment: dict[str, object] | None = None
+    # Human-facing title + URL (no internal source ids)
+    citations: list[dict[str, str]] = Field(default_factory=list)
     debug: dict[str, object] | None = None
 
 
@@ -42,3 +44,4 @@ class StateResponse(BaseModel):
     session_id: str
     state: dict[str, object]
     assessment: dict[str, object] | None = None
+    citations: list[dict[str, str]] = Field(default_factory=list)

@@ -42,7 +42,7 @@ def _fake_process_with_assessment(message: str, case: EligibilityCase) -> TurnRe
         status=AssessmentStatus.LIKELY_ELIGIBLE,
         reasons=["test"],
         rule_version="test-rules",
-        source_ids=["agent-disclaimer"],
+        source_ids=["nc-fns-income-limits", "agent-disclaimer"],
     )
     case.assessment = assessment
     return TurnResult(
@@ -132,6 +132,13 @@ def test_chat_includes_assessment_status() -> None:
         chat = client.post("/api/chat", json={"message": "done"})
         assert chat.status_code == 200
         assert chat.json()["assessment_status"] == "likely_eligible"
+        cites = chat.json()["citations"]
+        assert cites
+        assert "title" in cites[0]
+        assert "url" in cites[0]
+        assert "morefood.org" in cites[0]["url"]
+        assert "nc-fns-income-limits" not in cites[0]["title"]
+        assert all("source_id" not in c for c in cites)
 
 
 @pytest.mark.usefixtures("fake_session_store")

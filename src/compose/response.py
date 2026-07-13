@@ -5,7 +5,7 @@ import json
 from src.eligibility.ruleset import RULESET
 from src.llm.client import chat_text
 from src.planner.missing import PlanResult
-from src.retrieval.kb import Citation
+from src.retrieval.kb import Citation, public_citation_dicts
 from src.state.models import Assessment, AssessmentStatus, EligibilityCase
 
 # Soft line — only appended on a terminal screening result, and at most once per case.
@@ -54,6 +54,11 @@ def _friendly_outcome(status: AssessmentStatus) -> str:
             "Do not announce a status. Just ask for the missing detail naturally."
         ),
     }[status]
+
+
+def _public_citation_payload(citations: list[Citation]) -> list[dict[str, str]]:
+    """Title + URL only for the model (no internal source ids)."""
+    return public_citation_dicts(citations, limit=3)
 
 
 def compose_response(
@@ -107,18 +112,25 @@ def compose_response(
         "- Never invent dollar thresholds or rules. Use numbers only from screening_result or citations.\n"
         "- Never claim you filed an application or contacted DSS.\n"
         "\n"
+        "CITATIONS (when the citations list is non-empty):\n"
+        "- Use only the provided title and full URL — never invent links.\n"
+        "- Never mention internal ids (e.g. nc-fns-income-limits, source_id).\n"
+        "- Prefer a short plain line such as: More: <title> — <url>\n"
+        "- At most one or two sources; skip sources with no URL unless the title alone helps.\n"
+        "\n"
         "THIS TURN mode="
         + mode
         + ":\n"
         + (
             "- Share the screening outcome in plain language using outcome_guidance.\n"
             "- Mention the monthly income figure and public threshold if provided.\n"
-            "- Optionally one short citation-backed note; keep it light.\n"
+            "- If citations include a title and URL, end with one short More: title — url line.\n"
             if mode == "share_screening_result"
             else "- Ask exactly ONE natural question (use next_question_hint as the idea, rephrase freely).\n"
             "- Do not recap every known fact. Do not say you still need more information as a status.\n"
             if mode == "collect_info" or mode == "ask_follow_up"
             else "- Answer using policy_context only, briefly, then continue intake if needed.\n"
+            "- If citations include title and URL, you may add one short More: title — url line.\n"
         )
     )
 
@@ -153,9 +165,7 @@ def compose_response(
             "known_facts": case.known_summary(),
             "next_question_hint": plan.next_question_hint or None,
             "screening_result": screening_payload,
-            "citations": [
-                {"title": c.title, "snippet": c.snippet[:280], "url": c.url} for c in citations[:3]
-            ]
+            "citations": _public_citation_payload(citations)
             if terminal or policy_answer_context
             else [],
             "policy_context": policy_answer_context,

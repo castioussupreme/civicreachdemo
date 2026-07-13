@@ -21,6 +21,7 @@ from src.eligibility.ruleset import RULESET
 from src.openai_errors import OpenAIServiceError
 from src.process_turn import process_turn
 from src.retrieval.index import ensure_index
+from src.retrieval.kb import public_citation_dicts
 from src.session import SessionStoreProtocol, open_session_store
 from src.state.models import OPENING_MESSAGE
 
@@ -213,8 +214,16 @@ def chat(
 
     assessment_status = result.assessment.status.value if result.assessment is not None else None
     assessment_payload: dict[str, object] | None = None
+    source_ids: list[str] = []
     if result.case.assessment is not None:
         assessment_payload = dict(result.case.assessment.model_dump())
+        source_ids = list(result.case.assessment.source_ids)
+    # Human title/URL for clients (CLI card); no internal source ids.
+    citations_payload = public_citation_dicts(
+        result.citations,
+        source_ids=source_ids or None,
+        limit=4,
+    )
     # stage/assessment_status are for clients; reply text stays human-facing.
     # Full plan/extract metadata only when ?debug=true.
     debug_payload: dict[str, object] | None = dict(result.debug) if debug else None
@@ -225,6 +234,7 @@ def chat(
         stage=result.case.stage.value,
         assessment_status=assessment_status,
         assessment=assessment_payload,
+        citations=citations_payload,
         debug=debug_payload,
     )
 
@@ -235,12 +245,15 @@ def session_state(request: Request, session_id: str) -> StateResponse:
         raise HTTPException(status_code=400, detail="session_id required")
     case = _get_store(request).get(session_id)
     assessment_payload: dict[str, object] | None = None
+    source_ids: list[str] = []
     if case.assessment is not None:
         assessment_payload = dict(case.assessment.model_dump())
+        source_ids = list(case.assessment.source_ids)
     return StateResponse(
         session_id=session_id,
         state=dict(case.known_summary()),
         assessment=assessment_payload,
+        citations=public_citation_dicts(source_ids=source_ids or None, limit=4),
     )
 
 

@@ -17,6 +17,7 @@ from src.cli_display import format_assessment_card, should_show_assessment_card
 from src.config import resolve_public_api_base
 from src.json_types import JsonObject, JsonValue
 from src.logging_config import configure_client_logging
+from src.retrieval.kb import Citation
 from src.state.models import Assessment, AssessmentStatus
 
 console = Console()
@@ -86,17 +87,45 @@ def _assessment_from_payload(data: JsonObject | None) -> Assessment | None:
         return None
 
 
+def _citations_from_payload(data: JsonObject | None) -> list[Citation] | None:
+    """API returns title/url dicts — map to Citation for the card."""
+    if not data:
+        return None
+    raw = data.get("citations")
+    if not isinstance(raw, list) or not raw:
+        return None
+    out: list[Citation] = []
+    for i, item in enumerate(raw):
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        url_raw = item.get("url")
+        url = str(url_raw).strip() if url_raw else None
+        if not title and not url:
+            continue
+        out.append(
+            Citation(
+                source_id=f"api-{i}",
+                title=title or "Public source",
+                url=url,
+                snippet="",
+            )
+        )
+    return out or None
+
+
 def _print_assistant(
     text: str,
     *,
     assessment: Assessment | None = None,
+    citations: list[Citation] | None = None,
 ) -> None:
     console.print()
     console.print(Panel(Markdown(text), title="Assistant", border_style="green"))
     if should_show_assessment_card(assessment) and assessment is not None:
         console.print(
             Panel(
-                format_assessment_card(assessment),
+                format_assessment_card(assessment, citations=citations),
                 title="Screening summary",
                 border_style="cyan",
             )
@@ -115,9 +144,10 @@ def _print_why(api: AgentApiClient, session_id: str) -> None:
             "[dim]No screening result yet — keep chatting until we have enough to assess.[/dim]"
         )
         return
+    cites = _citations_from_payload(payload)
     console.print(
         Panel(
-            format_assessment_card(assessment),
+            format_assessment_card(assessment, citations=cites),
             title="Last screening summary",
             border_style="cyan",
         )
@@ -127,7 +157,8 @@ def _print_why(api: AgentApiClient, session_id: str) -> None:
 def _print_chat_result(data: JsonObject, *, debug: bool) -> None:
     reply = str(data.get("reply") or "")
     assessment = _assessment_from_payload(_as_object(data.get("assessment")))
-    _print_assistant(reply, assessment=assessment)
+    cites = _citations_from_payload(data)
+    _print_assistant(reply, assessment=assessment, citations=cites)
     if debug and data.get("debug") is not None:
         console.print(
             Panel(

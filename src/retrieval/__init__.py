@@ -4,6 +4,8 @@ from src.retrieval.kb import (
     format_citations,
     get_by_id,
     load_corpus,
+    public_citation_dicts,
+    public_citations_from_ids,
     retrieve,
     retrieve_supporting_policy,
 )
@@ -14,6 +16,8 @@ __all__ = [
     "format_citations",
     "get_by_id",
     "load_corpus",
+    "public_citation_dicts",
+    "public_citations_from_ids",
     "retrieve",
     "retrieve_supporting_policy",
     "sync_knowledge_index",

@@ -41,6 +41,10 @@ def test_format_assessment_card_is_user_friendly() -> None:
     assert "Normalized gross" not in card
     assert "Informal screen only" in card
     assert "County DSS decides" in card
+    # Resolves assessment.source_ids to real title + URL
+    assert "Public sources" in card
+    assert "morefood.org" in card
+    assert "nc-fns-income-limits" not in card
 
 
 def test_format_assessment_card_with_citations() -> None:
@@ -48,13 +52,15 @@ def test_format_assessment_card_with_citations() -> None:
         Citation(
             source_id="nc-fns-income-limits",
             title="Income limits",
-            url="https://example.com",
+            url="https://example.com/limits",
             snippet="table",
         )
     ]
     card = format_assessment_card(_assessment(), citations=cites)
-    assert "Sources:" in card
-    assert "Income limits" in card or "nc-fns-income-limits" in card
+    assert "Public sources" in card
+    assert "Income limits" in card
+    assert "https://example.com/limits" in card
+    assert "[nc-fns-income-limits]" not in card
 
 
 def test_should_show_card_only_for_terminal() -> None:

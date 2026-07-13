@@ -7,7 +7,7 @@ import logging
 from src.config import get_settings
 from src.retrieval.embeddings import embed_query
 from src.retrieval.index import ensure_index, vector_index_ready
-from src.retrieval.kb import Citation
+from src.retrieval.kb import Citation, enrich_citation
 from src.retrieval.qdrant_store import StoredChunk, make_client, search
 
 logger = logging.getLogger(__name__)
@@ -95,16 +95,15 @@ def _vector_retrieve(
         snippet = h.chunk_text.strip()
         if len(snippet) > 400:
             snippet = snippet[:397] + "..."
-        citations.append(
-            Citation(
-                source_id=h.source_id,
-                title=h.title or h.source_id,
-                url=h.url,
-                snippet=snippet,
-                effective_from=h.effective_from,
-                effective_to=h.effective_to,
-            )
+        raw = Citation(
+            source_id=h.source_id,
+            title=h.title or h.source_id,
+            url=h.url,
+            snippet=snippet,
+            effective_from=h.effective_from,
+            effective_to=h.effective_to,
         )
+        citations.append(enrich_citation(raw))
     return citations
 
 

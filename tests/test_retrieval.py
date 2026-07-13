@@ -12,6 +12,7 @@ from src.retrieval.kb import (
     format_citations,
     get_by_id,
     load_corpus,
+    public_citation_dicts,
     retrieve,
     retrieve_supporting_policy,
 )
@@ -127,21 +128,34 @@ def test_retrieve_respects_limit() -> None:
     assert len(cites) == 2
 
 
+def test_public_citation_dicts_titles_and_urls_only() -> None:
+    rows = public_citation_dicts(
+        source_ids=["nc-fns-income-limits", "agent-disclaimer"],
+    )
+    assert len(rows) == 1
+    assert "title" in rows[0]
+    assert "url" in rows[0]
+    assert "source_id" not in rows[0]
+    assert "morefood.org" in rows[0]["url"]
+
+
 def test_format_citations() -> None:
     text = format_citations(
         [
             Citation(
-                source_id="x",
-                title="T",
-                url="https://e.x",
+                source_id="nc-fns-income-limits",
+                title="NC SNAP/FNS gross monthly income limits (FY 2026)",
+                url="https://morefood.org/using-snap/am-i-eligible/",
                 snippet="s",
                 effective_from="2025-01-01",
             )
         ]
     )
-    assert "Sources:" in text
-    assert "[x]" in text
-    assert "https://e.x" in text
+    assert "Public sources" in text
+    assert "NC SNAP/FNS gross monthly income limits" in text
+    assert "https://morefood.org/using-snap/am-i-eligible/" in text
+    assert "[nc-fns-income-limits]" not in text
+    assert "Sources:" not in text
 
 
 def test_retrieve_returns_empty_on_embed_failure() -> None:

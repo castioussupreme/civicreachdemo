@@ -5,7 +5,11 @@ from __future__ import annotations
 import re
 
 from src.compose.response import is_terminal_assessment
-from src.retrieval.kb import Citation, format_citations
+from src.retrieval.kb import (
+    Citation,
+    format_citations,
+    public_citations_from_ids,
+)
 from src.state.models import Assessment, AssessmentStatus
 
 STATUS_LABELS = {
@@ -58,8 +62,11 @@ def format_assessment_card(
             lines.append(f"  • {_friendly_reason(c)}")
         lines.append("")
 
-    if citations:
-        cite = format_citations(citations)
+    display_cites = citations
+    if display_cites is None and assessment.source_ids:
+        display_cites = public_citations_from_ids(assessment.source_ids)
+    if display_cites:
+        cite = format_citations(display_cites)
         if cite:
             lines.append(cite)
             lines.append("")

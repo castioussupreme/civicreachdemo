@@ -1,0 +1,4 @@
+# CalFresh happy path — HH=2, $3000 gross under $3526
+I live in California
+Two people buy and cook food together
+We make $3000 a month before taxes, total for the household

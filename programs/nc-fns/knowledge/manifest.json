@@ -13,6 +13,16 @@
       "notes": "Program overview and high-level eligibility factors."
     },
     {
+      "id": "nc-fns-income-limits-2024",
+      "title": "NC SNAP/FNS gross monthly income limits (FFY 2025 / Oct 2024–Sep 2025)",
+      "file": "nc-fns-income-limits-2024.md",
+      "url": "https://www.fns.usda.gov/snap/allotment/COLA",
+      "publisher": "USDA FNS (SNAP COLA) / NC public screening use",
+      "effective_from": "2024-10-01",
+      "effective_to": "2025-09-30",
+      "notes": "Prior-year 200% FPL gross table. Dual-copied with rules/2024-10.yaml."
+    },
+    {
       "id": "nc-fns-income-limits",
       "title": "NC SNAP/FNS gross monthly income limits (FY 2026)",
       "file": "nc-fns-income-limits.md",
@@ -21,16 +31,6 @@
       "effective_from": "2025-10-01",
       "effective_to": "2026-09-30",
       "notes": "Public screening table labeled Maximum Gross Monthly Income (200%). Some households may face a 130% test determined by DSS."
-    },
-    {
-      "id": "nc-fns-income-limits-2026",
-      "title": "NC SNAP/FNS gross monthly income limits (FY 2027 / 2026-10 ruleset)",
-      "file": "nc-fns-income-limits-2026.md",
-      "url": "https://morefood.org/using-snap/am-i-eligible/",
-      "publisher": "More In My Basket (NC State / USDA-funded outreach)",
-      "effective_from": "2026-10-01",
-      "effective_to": null,
-      "notes": "Illustrative next-FY 200% table for multi-version / rollover testing. Dual-copied with rules/2026-10.yaml."
     },
     {
       "id": "nc-fns-gross-income-tests",

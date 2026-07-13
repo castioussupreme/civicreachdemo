@@ -37,38 +37,38 @@ def test_resolve_ruleset_current_fy() -> None:
     assert not rs.covers(date(2024, 1, 1))
 
 
-def test_resolve_ruleset_next_fy() -> None:
-    """On/after 2026-10-01 the open-ended 2026-10 ruleset wins."""
-    rs = resolve_ruleset("nc-fns", date(2026, 10, 1))
-    assert rs.id == "nc-fns-screening-2026-10"
-    assert rs.effective_to is None
-    assert rs.threshold_for_household(2) == 3600.0
-    assert rs.covers(date(2027, 6, 1))
+def test_resolve_ruleset_prior_fy() -> None:
+    """Prior FFY (2024-10) table for as_of before Oct 2025."""
+    rs = resolve_ruleset("nc-fns", date(2025, 3, 1))
+    assert rs.id == "nc-fns-screening-2024-10"
+    assert rs.threshold_for_household(2) == 3408.0
+    assert rs.covers(date(2025, 9, 30))
+    assert not rs.covers(date(2025, 10, 1))
 
 
 def test_resolve_ruleset_last_day_of_prior_fy() -> None:
-    rs = resolve_ruleset("nc-fns", date(2026, 9, 30))
-    assert rs.id == "nc-fns-screening-2025-10"
-    assert rs.threshold_for_household(2) == 3526.0
+    rs = resolve_ruleset("nc-fns", date(2025, 9, 30))
+    assert rs.id == "nc-fns-screening-2024-10"
+    assert rs.threshold_for_household(2) == 3408.0
 
 
 def test_resolve_ruleset_outside_window() -> None:
     with pytest.raises(ProgramNotAvailableError):
-        resolve_ruleset("nc-fns", date(2024, 1, 1))
+        resolve_ruleset("nc-fns", date(2023, 1, 1))
 
 
 def test_catalog_lists_active_ruleset_for_as_of() -> None:
-    early = catalog_programs(q="nc-fns", as_of=date(2026, 1, 15), limit=10)
-    assert early and early[0].ruleset_id == "nc-fns-screening-2025-10"
-    late = catalog_programs(q="nc-fns", as_of=date(2026, 11, 1), limit=10)
-    assert late and late[0].ruleset_id == "nc-fns-screening-2026-10"
+    prior = catalog_programs(q="nc-fns", as_of=date(2025, 3, 1), limit=10)
+    assert prior and prior[0].ruleset_id == "nc-fns-screening-2024-10"
+    current = catalog_programs(q="nc-fns", as_of=date(2026, 1, 15), limit=10)
+    assert current and current[0].ruleset_id == "nc-fns-screening-2025-10"
 
 
 def test_catalog_search() -> None:
     all_p = catalog_programs(q="", as_of=date(2026, 1, 15), limit=10)
-    assert any(e.slug == "nc-fns" for e in all_p)
+    assert {e.slug for e in all_p} >= {"nc-fns", "ca-calfresh"}
+    # SNAP is an alias for both programs; both may match
     filtered = catalog_programs(q="SNAP", as_of=date(2026, 1, 15), limit=10)
-    assert len(filtered) >= 1
-    assert filtered[0].slug == "nc-fns"
+    assert {e.slug for e in filtered} >= {"nc-fns", "ca-calfresh"}
     none = catalog_programs(q="zzzz-not-a-program", as_of=date(2026, 1, 15), limit=10)
     assert none == []

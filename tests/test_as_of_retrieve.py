@@ -52,16 +52,16 @@ def test_retrieve_filters_docs_by_as_of() -> None:
     """Within program silo, expired FY table should not surface after rollover."""
     hits = [
         _chunk(
-            "nc-fns-income-limits",
+            "nc-fns-income-limits-2024",
             score=0.99,
-            effective_from="2025-10-01",
-            effective_to="2026-09-30",
+            effective_from="2024-10-01",
+            effective_to="2025-09-30",
         ),
         _chunk(
-            "nc-fns-income-limits-2026",
+            "nc-fns-income-limits",
             score=0.95,
-            effective_from="2026-10-01",
-            effective_to=None,
+            effective_from="2025-10-01",
+            effective_to="2026-09-30",
         ),
         _chunk("nc-fns-overview", score=0.5, effective_from=None, effective_to=None),
     ]
@@ -101,23 +101,23 @@ def test_retrieve_filters_docs_by_as_of() -> None:
     ):
         gs.return_value.effective_qdrant_url.return_value = "http://localhost:6333"
         gs.return_value.retrieval_top_k = 5
-        before = retrieve(
+        prior = retrieve(
+            "income limits",
+            program_slug="nc-fns",
+            as_of="2025-03-01",
+            limit=5,
+        )
+        current = retrieve(
             "income limits",
             program_slug="nc-fns",
             as_of="2026-03-01",
             limit=5,
         )
-        after = retrieve(
-            "income limits",
-            program_slug="nc-fns",
-            as_of="2026-10-15",
-            limit=5,
-        )
 
-    before_ids = {c.source_id for c in before}
-    after_ids = {c.source_id for c in after}
-    assert "nc-fns-income-limits" in before_ids
-    assert "nc-fns-income-limits-2026" not in before_ids
-    assert "nc-fns-income-limits-2026" in after_ids
-    assert "nc-fns-income-limits" not in after_ids
-    assert "nc-fns-overview" in before_ids and "nc-fns-overview" in after_ids
+    prior_ids = {c.source_id for c in prior}
+    current_ids = {c.source_id for c in current}
+    assert "nc-fns-income-limits-2024" in prior_ids
+    assert "nc-fns-income-limits" not in prior_ids
+    assert "nc-fns-income-limits" in current_ids
+    assert "nc-fns-income-limits-2024" not in current_ids
+    assert "nc-fns-overview" in prior_ids and "nc-fns-overview" in current_ids

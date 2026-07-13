@@ -1,0 +1,16 @@
+slug: ca-calfresh
+display_name: "California CalFresh (SNAP)"
+search_aliases:
+  - CalFresh
+  - California SNAP
+  - California food stamps
+  - food assistance California
+  - CDSS CalFresh
+service_area_name: "California"
+service_area_short: "CA"
+program_effective_from: null
+program_effective_to: null
+opening_message: >-
+  Hi — I can help with a quick check on whether you might qualify for
+  California CalFresh (food assistance / SNAP).
+  Can you start by telling me a little about your household and income?

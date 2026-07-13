@@ -6,6 +6,9 @@ search_aliases:
   - food stamps
   - food assistance
   - North Carolina SNAP
+  - North Carolina food
+service_area_name: "North Carolina"
+service_area_short: "NC"
 program_effective_from: null
 program_effective_to: null
 opening_message: >-

@@ -47,6 +47,13 @@ make smoke             # live multi-scenario E2E (happy/net/individual/student/i
 
 **Programs:** policy packs live under `programs/{slug}/` (rules YAML, knowledge, smoke). `src/` is reusable infrastructure. Sessions pin a program + ruleset at create (`GET /api/programs?q=` for discovery; CLI type-to-narrow picker). Qdrant is one collection with **mandatory `program_slug` pre-filter** on every retrieve.
 
+| Pack | Role |
+| ---- | ---- |
+| `nc-fns` | North Carolina FNS / SNAP gross screen (multi-year rulesets 2024-10 + 2025-10) |
+| `ca-calfresh` | California CalFresh / SNAP gross screen (public CDSS / county tables) |
+
+**Add a program:** see `AGENTS.md` (“How to add a program”).
+
 | Client         | Role                 | Where operator detail lands |
 | -------------- | -------------------- | --------------------------- |
 | CLI / smoke    | UX + exit codes only | **Agent** Docker logs       |
@@ -209,7 +216,7 @@ programs/
 AGENTS.md           coding-agent rules (program packs + dual-copy)
 ```
 
-Rulesets: `programs/nc-fns/rules/2025-10.yaml` and `2026-10.yaml` (multi-version; resolve by `as_of`, pin on session create). Dual-copy tables in `programs/nc-fns/knowledge/nc-fns-income-limits*.md`. Retrieve filters docs by effective window so the wrong FY table is not cited.
+Rulesets (NC): `programs/nc-fns/rules/2024-10.yaml` (prior FFY) and `2025-10.yaml` (current); resolve by `as_of`, pin on session create. CalFresh: `programs/ca-calfresh/rules/2025-10.yaml`. Dual-copy tables live with each pack’s knowledge docs. Retrieve filters by `program_slug` and document effective window.
 
 ---
 

@@ -1,0 +1,24 @@
+# Dual copy with programs/ca-calfresh/knowledge/calfresh-income-limits.md — see AGENTS.md
+# Public 200% FPL gross standards for CalFresh BBCE/MCE (FFY 2026), e.g. CDSS / county tables.
+# Source example: LA County DPSS CalFresh gross income chart effective Oct 1, 2025.
+id: ca-calfresh-screening-2025-10
+effective_from: "2025-10-01"
+effective_to: "2026-09-30"
+source_id: calfresh-income-limits
+supporting_source_ids:
+  - calfresh-overview
+  - calfresh-how-to-apply
+  - calfresh-disclaimer
+description: >-
+  Informal CalFresh gross monthly income screen using the public 200% FPL table
+  for FFY 2026. Not an official determination; county human services / CDSS decides.
+max_gross_monthly_by_size:
+  1: 2610.0
+  2: 3526.0
+  3: 4442.0
+  4: 5360.0
+  5: 6276.0
+  6: 7192.0
+  7: 8110.0
+  8: 9026.0
+additional_member_increment: 918.0

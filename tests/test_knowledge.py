@@ -19,6 +19,7 @@ def test_manifest_lists_expected_sources() -> None:
     assert "agent-disclaimer" in ids
     assert "nc-fns-general-requirements" in ids
     assert "nc-fns-gross-income-tests" in ids
+    assert "nc-fns-income-limits-2024" in ids
     for src in manifest["sources"]:
         path = KNOWLEDGE / src["file"]
         assert path.is_file(), f"missing knowledge file {src['file']}"
@@ -48,8 +49,8 @@ def test_income_doc_matches_ruleset_table() -> None:
         # source_id maps to knowledge file stem or known dual-copy file
         if rs.source_id == "nc-fns-income-limits":
             path = KNOWLEDGE / "nc-fns-income-limits.md"
-        elif rs.source_id == "nc-fns-income-limits-2026":
-            path = KNOWLEDGE / "nc-fns-income-limits-2026.md"
+        elif rs.source_id == "nc-fns-income-limits-2024":
+            path = KNOWLEDGE / "nc-fns-income-limits-2024.md"
         else:
             continue
         text = path.read_text(encoding="utf-8")

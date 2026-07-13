@@ -4,16 +4,23 @@ import json
 
 from src.extraction.schema import ExtractionResult, coerce_extraction
 from src.llm.client import chat_json
+from src.programs.registry import get_program
 from src.state.models import EligibilityCase
 
-EXTRACTION_SYSTEM = """You extract structured facts for an NC FNS (SNAP) eligibility screening case.
+
+def _extraction_system(*, service_area: str, program_name: str) -> str:
+    return f"""You extract structured facts for a {program_name} eligibility screening case.
 Return ONLY a JSON object. Do not invent facts the user did not imply.
 If the user is approximate ("about 2500"), still extract the number but set lower confidence.
 If the user answers multiple questions at once, extract all facts you can.
 
+Service area for residency: {service_area}.
+Set lives_in_nc true only if the user lives in {service_area}; false if they live elsewhere.
+(The field name lives_in_nc is historical; it means "lives in the program service area.")
+
 Schema:
-{
-  "facts": {
+{{
+  "facts": {{
     "lives_in_nc": true|false|null,
     "household_size": number|null,
     "income_amount": number|null,
@@ -24,12 +31,12 @@ Schema:
     "elderly_or_disabled_member": true|false|null,
     "confirm_field": string|null,
     "confirm_value": string|number|boolean|null,
-    "confidence": { "<field>": 0.0-1.0 }
-  },
+    "confidence": {{ "<field>": 0.0-1.0 }}
+  }},
   "user_intents": ["eligibility_screening"|"policy_question"|"greeting"|"other"],
   "policy_question": string|null,
   "notes": string|null
-}
+}}
 
 Rules:
 - income_amount should be numeric only (no $).
@@ -62,6 +69,15 @@ def extract_facts(
     *,
     previous_question: str | None = None,
 ) -> ExtractionResult:
+    try:
+        prog = get_program(case.program_slug or "nc-fns")
+        service_area = prog.service_area_name
+        program_name = prog.display_name
+    except Exception:
+        service_area = "the program service area"
+        program_name = "public benefits"
+    system = _extraction_system(service_area=service_area, program_name=program_name)
+
     # Last few turns for anaphora only ("yes", "the higher one") — case slots remain truth.
     recent = [
         {"role": t.role, "text": t.text[:400]}
@@ -71,6 +87,7 @@ def extract_facts(
     user_payload = {
         "message": message,
         "previous_question": previous_question or case.last_question,
+        "service_area": service_area,
         "current_state": case.known_summary(),
         "recent_conversation": recent,
         "open_contradictions": [
@@ -87,7 +104,7 @@ def extract_facts(
     }
 
     data = chat_json(
-        system=EXTRACTION_SYSTEM,
+        system=system,
         user=json.dumps(user_payload),
         temperature=0.0,
     )

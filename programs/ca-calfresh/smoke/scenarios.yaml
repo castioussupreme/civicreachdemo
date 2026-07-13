@@ -1,0 +1,7 @@
+scenarios:
+  - name: happy
+    script: happy.txt
+    expect_status: likely_eligible
+    expect_household: 2
+    expect_monthly: 3000.0
+    expect_threshold: null  # size 2 from CalFresh ruleset ($3,526)

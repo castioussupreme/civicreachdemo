@@ -12,9 +12,19 @@ POC NC FNS informal screening agent. Prefer small, correct changes over new infr
 
 - Policy data lives under `programs/{slug}/` (rules YAML, knowledge, smoke).
 - **`src/` is program-agnostic** infrastructure (pipeline, API, Qdrant, registry).
-- Registry: `programs/registry.yaml`. Default slug is first listed pack.
+- Registry: `programs/registry.yaml`. Default slug is first listed pack (`nc-fns`).
+- Second pack `ca-calfresh` is a real public program (California CalFresh / SNAP) for multi-program scale.
 - Sessions pin `program_slug` + `ruleset_id` at create; do not switch program mid-session.
 - Qdrant: one collection; every retrieve **pre-filters** by `program_slug` (never post-filter).
+
+### How to add a program
+
+1. Create `programs/{slug}/program.yaml` (display name, `search_aliases`, opening message).
+2. Add `rules/*.yaml` with thresholds, `effective_from` / `effective_to` (null = open-ended), `source_id`, optional `supporting_source_ids`.
+3. Add `knowledge/manifest.json` + markdown (dual-copy income table with the rules YAML).
+4. Optional `smoke/scenarios.yaml` + scripts.
+5. Register the slug in `programs/registry.yaml`.
+6. `make index` + `make test` (+ `make smoke --program {slug}` when live).
 
 ## Dual copy of income thresholds (intentional, per pack)
 
@@ -22,8 +32,8 @@ For **nc-fns**, eligibility **math** is `programs/nc-fns/rules/*.yaml`; the **pu
 
 | Role                                | Path                                                                |
 | ----------------------------------- | ------------------------------------------------------------------- |
-| Rules (authoritative for assessment) | `programs/nc-fns/rules/*.yaml` (one file per FY version)            |
-| Knowledge (RAG / display table)     | Matching `nc-fns-income-limits*.md` dual-copied per ruleset         |
+| Rules (authoritative for assessment) | `programs/nc-fns/rules/2024-10.yaml`, `2025-10.yaml` (and peers)   |
+| Knowledge (RAG / display table)     | `nc-fns-income-limits-2024.md`, `nc-fns-income-limits.md`, etc.     |
 | Manifest metadata                   | `programs/nc-fns/knowledge/manifest.json` (per-source effective dates) |
 | Soft CI guard                       | `tests/test_knowledge.py` (each ruleset ↔ its income doc)           |
 

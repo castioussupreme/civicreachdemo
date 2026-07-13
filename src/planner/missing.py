@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from src.eligibility.income import normalize_to_monthly
 from src.eligibility.ruleset import RULESET
-from src.programs.registry import get_ruleset_by_id
+from src.programs.registry import get_program, get_ruleset_by_id
 from src.state.models import EligibilityCase, FieldStatus, Stage
 
 
@@ -17,58 +17,71 @@ class PlanResult:
     open_contradictions: list[str]
 
 
-# Household wording should stay aligned with knowledge/nc-fns-general-requirements.md
-# ("buy and prepare food together"). See AGENTS.md.
-QUESTION_HINTS = {
-    "lives_in_nc": "Do you currently live in North Carolina?",
-    "household_size": (
-        "How many people buy and prepare food together with you (including yourself)?"
-    ),
-    "income_amount": (
-        "About how much income does your household get before taxes? "
-        "A round number is fine — per day, weekly, every two weeks, twice a month, "
-        "monthly, or yearly."
-    ),
-    "income_amount_clarify": (
-        "I want to make sure I have the right income figure. "
-        "About how much is it, and is that per day, weekly, every two weeks, "
-        "twice a month, monthly, or yearly?"
-    ),
-    "income_period": (
-        "Is that amount per day, weekly, every two weeks, twice a month "
-        "(like the 1st and 15th), monthly, or yearly?"
-    ),
-    "gross_or_net": ("Is that roughly before taxes, or take-home pay after taxes?"),
-    "household_or_individual": (
-        "Is that the total for everyone in the household, or just your income?"
-    ),
-    "approx_gross": (
-        "This screen uses income before taxes (gross), not take-home pay. "
-        "About how much is that amount before taxes, if you know? "
-        "A rough number is fine — or say if you only know take-home."
-    ),
-    "approx_household_total": (
-        "This screen needs total household income for everyone who buys and prepares "
-        "food together — not just one person's pay. "
-        "About how much is the household total before taxes, if you know? "
-        "A rough number is fine — or say if you only know your own."
-    ),
-}
+# Household wording: "buy and prepare food together" (SNAP-style). See AGENTS.md.
 
-FIELD_LABELS = {
-    "lives_in_nc": "whether you live in North Carolina",
-    "household_size": "household size",
-    "income_amount": "income amount",
-    "income_period": "how often that income is paid",
-    "gross_or_net": "whether income is before or after taxes",
-    "household_or_individual": "whether income is household-total or just yours",
-    "is_student": "student status",
-    "elderly_or_disabled_member": "whether someone is elderly or disabled",
-}
+
+def _service_area(case: EligibilityCase) -> str:
+    try:
+        return get_program(case.program_slug or "nc-fns").service_area_name
+    except Exception:
+        return "the program service area"
+
+
+def _question_hints(case: EligibilityCase) -> dict[str, str]:
+    area = _service_area(case)
+    return {
+        "lives_in_nc": f"Do you currently live in {area}?",
+        "household_size": (
+            "How many people buy and prepare food together with you (including yourself)?"
+        ),
+        "income_amount": (
+            "About how much income does your household get before taxes? "
+            "A round number is fine — per day, weekly, every two weeks, twice a month, "
+            "monthly, or yearly."
+        ),
+        "income_amount_clarify": (
+            "I want to make sure I have the right income figure. "
+            "About how much is it, and is that per day, weekly, every two weeks, "
+            "twice a month, monthly, or yearly?"
+        ),
+        "income_period": (
+            "Is that amount per day, weekly, every two weeks, twice a month "
+            "(like the 1st and 15th), monthly, or yearly?"
+        ),
+        "gross_or_net": ("Is that roughly before taxes, or take-home pay after taxes?"),
+        "household_or_individual": (
+            "Is that the total for everyone in the household, or just your income?"
+        ),
+        "approx_gross": (
+            "This screen uses income before taxes (gross), not take-home pay. "
+            "About how much is that amount before taxes, if you know? "
+            "A rough number is fine — or say if you only know take-home."
+        ),
+        "approx_household_total": (
+            "This screen needs total household income for everyone who buys and prepares "
+            "food together — not just one person's pay. "
+            "About how much is the household total before taxes, if you know? "
+            "A rough number is fine — or say if you only know your own."
+        ),
+    }
+
+
+def _field_labels(case: EligibilityCase) -> dict[str, str]:
+    area = _service_area(case)
+    return {
+        "lives_in_nc": f"whether you live in {area}",
+        "household_size": "household size",
+        "income_amount": "income amount",
+        "income_period": "how often that income is paid",
+        "gross_or_net": "whether income is before or after taxes",
+        "household_or_individual": "whether income is household-total or just yours",
+        "is_student": "student status",
+        "elderly_or_disabled_member": "whether someone is elderly or disabled",
+    }
 
 
 def _conflict_question(case: EligibilityCase, field: str) -> str:
-    label = FIELD_LABELS.get(field, field.replace("_", " "))
+    label = _field_labels(case).get(field, field.replace("_", " "))
     open_c = next((c for c in case.contradictions if c.field == field and not c.resolved), None)
     if open_c is not None:
         return (
@@ -143,9 +156,8 @@ def determine_missing_fields(case: EligibilityCase) -> PlanResult:
     if case.lives_in_nc.status in (FieldStatus.UNKNOWN, FieldStatus.UNCERTAIN):
         missing.append("lives_in_nc")
         if case.lives_in_nc.status == FieldStatus.UNCERTAIN:
-            hint_overrides["lives_in_nc"] = (
-                "Just to confirm — do you currently live in North Carolina?"
-            )
+            area = _service_area(case)
+            hint_overrides["lives_in_nc"] = f"Just to confirm — do you currently live in {area}?"
     elif case.lives_in_nc.is_usable() and case.lives_in_nc.value is False:
         return PlanResult(
             missing_fields=[],
@@ -227,7 +239,9 @@ def determine_missing_fields(case: EligibilityCase) -> PlanResult:
         ):
             stage = Stage.CLARIFYING
 
-        hint = hint_overrides.get(primary) or QUESTION_HINTS.get(primary, "Could you tell me more?")
+        hint = hint_overrides.get(primary) or _question_hints(case).get(
+            primary, "Could you tell me more?"
+        )
         return PlanResult(
             missing_fields=missing,
             stage=stage,

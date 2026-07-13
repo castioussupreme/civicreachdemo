@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 from src.eligibility.ruleset import RULESET, Ruleset
-from src.programs.registry import get_ruleset_by_id
+from src.programs.registry import get_program, get_ruleset_by_id
 from src.state.models import (
     Assessment,
     AssessmentStatus,
     EligibilityCase,
     FieldStatus,
 )
+
+
+def _service_area(case: EligibilityCase) -> tuple[str, str]:
+    """Return (full name, short code) for residency messaging."""
+    try:
+        prog = get_program(case.program_slug or "nc-fns")
+        return prog.service_area_name, prog.display_name
+    except Exception:
+        return "the program service area", "this program"
 
 
 def _ruleset_for_case(case: EligibilityCase, ruleset: Ruleset | None) -> Ruleset:
@@ -30,12 +39,7 @@ def calculate_eligibility(
     Pure function of case state + versioned ruleset (pinned on the case when set).
     """
     ruleset = _ruleset_for_case(case, ruleset)
-    source_ids = [
-        ruleset.source_id,
-        "nc-fns-gross-income-tests",
-        "agent-disclaimer",
-        "nc-fns-general-requirements",
-    ]
+    source_ids = [ruleset.source_id, *ruleset.supporting_source_ids]
     caveats: list[str] = [
         "This is an informal screening only—not an official DSS determination.",
         (
@@ -43,28 +47,43 @@ def calculate_eligibility(
             + (f" to {ruleset.effective_to}" if ruleset.effective_to else " (open-ended)")
             + "."
         ),
-        "Some households may face a stricter (~130%) gross income test; only DSS "
-        "decides which test applies (this screen uses the public 200% table only).",
     ]
+    # NC FNS-style 130% note only when that supporting doc is declared on the pack
+    if "nc-fns-gross-income-tests" in ruleset.supporting_source_ids:
+        caveats.append(
+            "Some households may face a stricter (~130%) gross income test; only DSS "
+            "decides which test applies (this screen uses the public 200% table only)."
+        )
     reasons: list[str] = []
 
-    # Residency hard gate for NC FNS screening
+    area, program_name = _service_area(case)
+
+    # Residency hard gate for the program's service area
     if case.lives_in_nc.status == FieldStatus.KNOWN and case.lives_in_nc.value is False:
+        overview = (
+            "nc-fns-overview"
+            if case.program_slug == "nc-fns"
+            else (
+                ruleset.supporting_source_ids[0]
+                if ruleset.supporting_source_ids
+                else ruleset.source_id
+            )
+        )
         return Assessment(
             status=AssessmentStatus.LIKELY_INELIGIBLE,
             reasons=[
-                "User indicated they do not live in North Carolina; "
-                "NC FNS is for North Carolina residents."
+                f"User indicated they do not live in {area}; "
+                f"{program_name} is for {area} residents."
             ],
             rule_version=ruleset.id,
-            source_ids=[*source_ids, "nc-fns-overview"],
-            caveats=[*caveats, "Other states administer their own SNAP programs."],
+            source_ids=[*source_ids, overview],
+            caveats=[*caveats, "Other jurisdictions administer their own assistance programs."],
         )
 
     if not case.lives_in_nc.is_usable():
         return Assessment(
             status=AssessmentStatus.NEEDS_MORE_INFORMATION,
-            reasons=["North Carolina residency has not been confirmed."],
+            reasons=[f"{area} residency has not been confirmed."],
             rule_version=ruleset.id,
             source_ids=source_ids,
             caveats=caveats,

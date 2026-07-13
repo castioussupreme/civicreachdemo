@@ -24,6 +24,8 @@ class Ruleset:
     max_gross_monthly_by_size: Mapping[int, float]
     additional_member_increment: float
     program_slug: str = ""
+    # Optional RAG source ids declared on the pack (not hardcoded NC FNS names)
+    supporting_source_ids: tuple[str, ...] = ()
 
     def threshold_for_household(self, size: int) -> float:
         if size < 1:
@@ -64,6 +66,9 @@ class ProgramMeta:
     program_effective_to: str | None
     opening_message: str
     root: Path
+    # Jurisdiction for residency gate (e.g. "North Carolina", "California")
+    service_area_name: str = ""
+    service_area_short: str = ""
 
     @property
     def knowledge_dir(self) -> Path:

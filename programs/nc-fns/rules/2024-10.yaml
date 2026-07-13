@@ -1,0 +1,24 @@
+# Dual copy with programs/nc-fns/knowledge/nc-fns-income-limits-2024.md — see AGENTS.md
+# Prior federal fiscal year (Oct 1, 2024 – Sep 30, 2025) 200% FPL gross standards
+# used by NC FNS public screening tables (USDA SNAP COLA / 48 contiguous states).
+id: nc-fns-screening-2024-10
+effective_from: "2024-10-01"
+effective_to: "2025-09-30"
+source_id: nc-fns-income-limits-2024
+supporting_source_ids:
+  - nc-fns-gross-income-tests
+  - agent-disclaimer
+  - nc-fns-general-requirements
+description: >-
+  NC FNS gross monthly income screen using the public 200% table for FFY 2025
+  (Oct 1, 2024 – Sep 30, 2025). Not an official determination.
+max_gross_monthly_by_size:
+  1: 2510.0
+  2: 3408.0
+  3: 4304.0
+  4: 5200.0
+  5: 6096.0
+  6: 6992.0
+  7: 7888.0
+  8: 8784.0
+additional_member_increment: 896.0

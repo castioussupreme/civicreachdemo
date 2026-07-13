@@ -46,6 +46,8 @@ def get_program(slug: str) -> ProgramMeta:
     opening = str(data.get("opening_message") or "").strip()
     if not opening:
         opening = f"Hi — I can help screen for {data.get('display_name') or slug}."
+    service_area = str(data.get("service_area_name") or "").strip()
+    service_short = str(data.get("service_area_short") or "").strip()
     return ProgramMeta(
         slug=str(data.get("slug") or slug),
         display_name=str(data.get("display_name") or slug),
@@ -54,6 +56,8 @@ def get_program(slug: str) -> ProgramMeta:
         program_effective_to=_opt_str(data.get("program_effective_to")),
         opening_message=opening,
         root=root,
+        service_area_name=service_area or str(data.get("display_name") or slug),
+        service_area_short=service_short or service_area or slug,
     )
 
 
@@ -175,6 +179,10 @@ def _ruleset_from_yaml(path: Path, *, program_slug: str) -> Ruleset:
         increment = float(str(inc_raw if inc_raw is not None else 0))
     except ValueError:
         increment = 0.0
+    support_raw = data.get("supporting_source_ids") or []
+    supporting: list[str] = []
+    if isinstance(support_raw, list):
+        supporting = [str(s) for s in support_raw if str(s).strip()]
     return Ruleset(
         id=str(data["id"]),
         effective_from=str(data["effective_from"]),
@@ -184,6 +192,7 @@ def _ruleset_from_yaml(path: Path, *, program_slug: str) -> Ruleset:
         max_gross_monthly_by_size=table,
         additional_member_increment=increment,
         program_slug=program_slug,
+        supporting_source_ids=tuple(supporting),
     )
 
 

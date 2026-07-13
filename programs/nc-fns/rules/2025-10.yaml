@@ -3,6 +3,10 @@ id: nc-fns-screening-2025-10
 effective_from: "2025-10-01"
 effective_to: "2026-09-30"
 source_id: nc-fns-income-limits
+supporting_source_ids:
+  - nc-fns-gross-income-tests
+  - agent-disclaimer
+  - nc-fns-general-requirements
 description: >-
   Simplified NC FNS gross monthly income screen using the public 200% table.
   Not an official determination; DSS may apply a 130% test or other rules.

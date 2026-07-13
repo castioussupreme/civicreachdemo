@@ -1,0 +1,46 @@
+{
+  "corpus_version": "2025-10-ca-calfresh-v1",
+  "description": "Curated public excerpts for California CalFresh (SNAP) screening POC. Not an official CDSS knowledge base.",
+  "sources": [
+    {
+      "id": "calfresh-overview",
+      "title": "CalFresh program overview",
+      "file": "calfresh-overview.md",
+      "url": "https://www.cdss.ca.gov/calfresh",
+      "publisher": "California Department of Social Services (CDSS)",
+      "effective_from": null,
+      "effective_to": null,
+      "notes": "Program overview; CALFRESH_MARKER for isolation tests."
+    },
+    {
+      "id": "calfresh-income-limits",
+      "title": "CalFresh gross monthly income limits (FFY 2026 / 200% FPL)",
+      "file": "calfresh-income-limits.md",
+      "url": "https://dpss.lacounty.gov/en/food/calfresh/gross-income.html",
+      "publisher": "LA County DPSS / CDSS public tables",
+      "effective_from": "2025-10-01",
+      "effective_to": "2026-09-30",
+      "notes": "Public 200% FPL gross standards for BBCE/MCE households. Dual-copied with rules/2025-10.yaml."
+    },
+    {
+      "id": "calfresh-how-to-apply",
+      "title": "How to apply for CalFresh (public pointers only)",
+      "file": "calfresh-how-to-apply.md",
+      "url": "https://www.cdss.ca.gov/calfresh",
+      "publisher": "CDSS",
+      "effective_from": null,
+      "effective_to": null,
+      "notes": "Static apply pointers only. Agent never submits applications."
+    },
+    {
+      "id": "calfresh-disclaimer",
+      "title": "CalFresh screening disclaimer",
+      "file": "calfresh-disclaimer.md",
+      "url": null,
+      "publisher": "This POC",
+      "effective_from": null,
+      "effective_to": null,
+      "notes": "Informal screen only."
+    }
+  ]
+}

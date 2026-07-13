@@ -1,6 +1,6 @@
-# Student under the simple gross table — income may pass, overall unable without full student rules
-# HH=1, $1500 gross/mo → under $2610, is_student → unable_to_determine
+# Student under the simple gross table (student_soft_unable module).
+# Flow: residency → HH size → income + student status in the income turn (student is not a required ask).
+# Expect: HH=1, $1500 gross, unable_to_determine
 I live in North Carolina
 Just me in the household
-I am a full-time college student
-I make $1500 a month before taxes, household total
+I am a full-time college student and I make $1500 a month before taxes, household total

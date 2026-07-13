@@ -1,5 +1,6 @@
-# One person's income in a multi-person household under the limit — unable without household total
-# HH=3, $2000 individual gross → under $4442; one-shot ask then still only individual
+# One person's income in a multi-person household under the limit.
+# Flow: residency → HH size → individual income → one-shot household-total follow-up (decline).
+# Expect: HH=3, $2000 individual, unable_to_determine
 I live in North Carolina
 Three of us buy and prepare food together
 I make $2000 a month before taxes, but that is only my income, not the whole household

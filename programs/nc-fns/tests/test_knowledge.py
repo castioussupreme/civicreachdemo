@@ -1,4 +1,4 @@
-"""Curated knowledge base consistency with the versioned ruleset."""
+"""NC FNS knowledge dual-copy and manifest consistency (pack-local)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from pathlib import Path
 from src.eligibility.ruleset import load_ruleset
 from src.programs.registry import load_all_rulesets
 
-ROOT = Path(__file__).resolve().parents[1]
-KNOWLEDGE = ROOT / "programs" / "nc-fns" / "knowledge"
+PACK = Path(__file__).resolve().parents[1]
+KNOWLEDGE = PACK / "knowledge"
 
 
 def test_manifest_lists_expected_sources() -> None:
@@ -34,19 +34,14 @@ def test_gross_income_tests_doc_explains_200_vs_130() -> None:
     assert "DSS" in text
     assert "does **not**" in text or "does not" in text.lower()
     assert "morefood.org" in text
-    # No parallel 130% dollar schedule — math stays on the 200% RULESET table only
     assert "$" not in text
 
 
 def test_income_doc_matches_ruleset_table() -> None:
     """
-    Spot-check: each ruleset version's amounts appear in its dual-copy knowledge doc.
-
-    Dual copy is intentional (math in YAML, table for RAG). Agents must update
-    both — see AGENTS.md. This is a soft guard, not a full table parser.
+    Dual copy: each ruleset version's amounts appear in its knowledge income doc.
     """
     for rs in load_all_rulesets("nc-fns"):
-        # source_id maps to knowledge file stem or known dual-copy file
         if rs.source_id == "nc-fns-income-limits":
             path = KNOWLEDGE / "nc-fns-income-limits.md"
         elif rs.source_id == "nc-fns-income-limits-2024":

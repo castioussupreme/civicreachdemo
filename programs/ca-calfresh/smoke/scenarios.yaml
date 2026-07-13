@@ -1,3 +1,4 @@
+# Scripts match planner order: residency → household_size → income.
 scenarios:
   - name: happy
     script: happy.txt

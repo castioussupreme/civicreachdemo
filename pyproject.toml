@@ -40,15 +40,19 @@ build-backend = "poetry.core.masonry.api"
 # --- App / test runtime ---
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# Infrastructure tests + pack-local tests under programs/{slug}/tests/
+testpaths = ["tests", "programs"]
+python_files = ["test_*.py"]
 pythonpath = ["."]
+# Same basenames under each pack (test_rules.py, …) need importlib mode
+addopts = ["--import-mode=importlib"]
 
 # --- Quality gates (pre-commit / CI) ---
 
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "tests", "programs"]
 
 [tool.ruff.lint]
 # Imports: top of file only (PEP 8). E402 = module-level import after non-import
@@ -79,6 +83,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["T20", "ARG", "PLR", "ANN001", "ANN201", "ANN202", "ANN204"]
+"programs/**/tests/**" = ["T20", "ARG", "PLR", "ANN001", "ANN201", "ANN202", "ANN204"]
+"programs/conftest.py" = ["T20", "ANN"]
 "start.py" = ["T20", "ANN"]
 "src/smoke.py" = ["T20"]
 
@@ -128,5 +134,5 @@ warn_required_dynamic_aliases = true
 
 [tool.vulture]
 min_confidence = 80
-paths = ["src", "tests"]
-exclude = [".venv", "*egg-info*"]
+paths = ["src", "tests", "programs"]
+exclude = [".venv", "*egg-info*", "programs/**/knowledge/**", "programs/**/smoke/**"]

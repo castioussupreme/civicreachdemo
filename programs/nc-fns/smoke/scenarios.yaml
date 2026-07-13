@@ -1,4 +1,7 @@
 # Thresholds resolved from the program ruleset at smoke time when null.
+# Scripts are ordered to match the planner: residency → household_size → income
+# (+ one-shot net/individual follow-ups where needed). Avoid burying residency
+# in the first line (e.g. "in North Carolina") or extract skips that turn.
 scenarios:
   - name: happy
     script: happy.txt

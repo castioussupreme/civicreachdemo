@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
 from typing import TypeVar
 
@@ -128,24 +127,8 @@ def test_residency_only_engine_eligible_without_income() -> None:
     assert result.threshold_used is None
 
 
-def test_nc_fns_requirements_include_gross_and_student() -> None:
-    rs = load_ruleset("nc-fns")
-    types = [r.type for r in rs.requirements]
-    assert types[0] == "residency"
-    assert "gross_income_limit" in types
-    assert "student_soft_unable" in types
-    assert rs.gross_income_table() is not None
-    assert rs.threshold_for_household(2) == 3526.0
-
-
-def test_ca_calfresh_has_no_student_module() -> None:
-    rs = load_ruleset("ca-calfresh", as_of=date(2026, 3, 1))
-    types = [r.type for r in rs.requirements]
-    assert "student_soft_unable" not in types
-    assert "gross_income_limit" in types
-
-
-def test_planner_uses_nc_fns_modules() -> None:
+def test_planner_uses_declared_modules_only() -> None:
+    """Any pack with residency-first requirements starts by asking residency."""
     rs = load_ruleset("nc-fns")
     case = EligibilityCase(
         program_slug="nc-fns",

@@ -24,8 +24,14 @@ POC NC FNS informal screening agent. Prefer small, correct changes over new infr
 2. Add `rules/*.yaml` with `effective_from` / `effective_to` (null = open-ended), `source_id`, optional `supporting_source_ids`, and a non-empty **`requirements`** list (compose existing module types + params).
 3. Add `knowledge/manifest.json` + markdown (dual-copy income table when using `gross_income_limit`).
 4. Optional `smoke/scenarios.yaml` (+ optional line-oriented script files).
-5. Register the slug in `programs/registry.yaml`.
-6. `make index` + `make test` (+ `make smoke PROGRAM={slug}` when live).
+5. Pack-local unit tests under `programs/{slug}/tests/`:
+   - `test_rules.py` — metadata, requirements list, thresholds, ruleset resolve
+   - `test_knowledge.py` — manifest + dual-copy income table
+   - `test_eligibility.py` — screening outcomes for **this** pack’s modules/numbers
+   - `test_smoke_pack.py` — scenarios.yaml + script alignment
+   Keep **infrastructure** tests in top-level `tests/`.
+6. Register the slug in `programs/registry.yaml`.
+7. `make index` + `make test` (+ `make smoke PROGRAM={slug}` when live).
 
 ### How to add a requirement module type
 
@@ -43,7 +49,7 @@ For **nc-fns**, eligibility **math** is `programs/nc-fns/rules/*.yaml`; the **pu
 | Rules (authoritative for assessment) | `programs/nc-fns/rules/2024-10.yaml`, `2025-10.yaml` (and peers)   |
 | Knowledge (RAG / display table)     | `nc-fns-income-limits-2024.md`, `nc-fns-income-limits.md`, etc.     |
 | Manifest metadata                   | `programs/nc-fns/knowledge/manifest.json` (per-source effective dates) |
-| Soft CI guard                       | `tests/test_knowledge.py` (each ruleset ↔ its income doc)           |
+| Soft CI guard                       | `programs/nc-fns/tests/test_knowledge.py` (ruleset ↔ income doc)    |
 
 **Multi-version:** resolve by `as_of` (latest `effective_from` wins); **pin** `ruleset_id` on session create.
 Retrieve filters knowledge docs by `as_of` within the program silo so the wrong FY table is not cited.

@@ -1,5 +1,6 @@
-# Net (take-home) under the public limit — expect unable_to_determine after one-shot gross ask
-# HH=1, ~$2000 take-home/mo → under $2610; we do not reverse-calculate gross
+# Net (take-home) under the public limit.
+# Flow: residency → HH size → take-home income → one-shot gross follow-up (decline).
+# Expect: HH=1, ~$2000/mo, unable_to_determine (no tax reverse-calc)
 I live in North Carolina
 Just me — household of one
 I take home about $2000 a month after taxes

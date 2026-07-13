@@ -17,6 +17,8 @@ sessions
 *.egg-info
 Engineering Case Study.md
 tests
+programs/**/tests
+programs/conftest.py
 # Host-only tooling (not needed in the agent image)
 start.py
 Makefile

@@ -80,6 +80,6 @@ hooks: install
 	@echo "    Run all checks:  poetry run pre-commit run --all-files"
 
 lint: install
-	$(POETRY) run ruff check src tests
+	$(POETRY) run ruff check src tests programs
 	$(POETRY) run mypy --config-file=pyproject.toml
-	$(POETRY) run vulture src tests --min-confidence 80
+	$(POETRY) run vulture src tests programs --min-confidence 80

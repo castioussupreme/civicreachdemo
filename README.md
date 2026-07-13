@@ -32,7 +32,7 @@ make smoke PROGRAM=nc-fns   # live multi-scenario E2E (PROGRAM required)
 | `make cli`              | Interactive CLI                                      |
 | `make smoke PROGRAM=…`  | Live multi-scenario E2E (OpenAI + Redis + Qdrant)    |
 | `make index`            | Resync knowledge embeddings (unchanged docs skipped) |
-| `make test`             | Unit tests (LLM/Qdrant stubbed)                      |
+| `make test`             | Unit tests: `tests/` + `programs/*/tests/`           |
 | `make lint`             | ruff + mypy + vulture                                |
 
 | Resource | Where                                                   |
@@ -218,8 +218,9 @@ src/
   smoke.py          live multi-scenario API smoke (pack-driven)
 programs/
   registry.yaml     enabled public-benefits program packs (clients pick explicitly)
-  nc-fns/           example pack: NC FNS rules, knowledge, smoke
-  ca-calfresh/      example pack: CalFresh rules, knowledge, smoke
+  nc-fns/           example pack: rules, knowledge, smoke, tests/
+  ca-calfresh/      example pack: rules, knowledge, smoke, tests/
+tests/              program-agnostic infrastructure tests
 AGENTS.md           coding-agent rules (program packs + dual-copy)
 ```
 

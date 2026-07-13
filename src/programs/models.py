@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
@@ -10,6 +11,38 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.eligibility.modules.base import RequirementSpec
+
+# Split display names / slugs into matchable segments (words + hyphen pieces)
+_SEGMENT_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
+
+
+def program_text_matches(query: str, *parts: str) -> bool:
+    """
+    Typeahead filter for program catalog / CLI.
+
+    Every whitespace-separated token must match at least one field.
+    Short tokens (1-2 chars) only match segment *prefixes* (slug pieces / words),
+    so "nc" hits "nc-fns" and "North Carolina" but not "assistance".
+    Longer tokens may also match as a plain substring.
+    """
+    q = (query or "").strip().lower()
+    if not q:
+        return True
+    fields = [str(p).strip().lower() for p in parts if str(p).strip()]
+    if not fields:
+        return False
+    tokens = q.split()
+    return all(any(_token_matches_field(token, field) for field in fields) for token in tokens)
+
+
+def _token_matches_field(token: str, field: str) -> bool:
+    if not token or not field:
+        return False
+    segments = _SEGMENT_RE.findall(field)
+    if any(seg.startswith(token) for seg in segments):
+        return True
+    # Longer queries: allow mid-string match (e.g. "nutrition" in display name)
+    return bool(len(token) >= 3 and token in field)
 
 
 @dataclass(frozen=True)
@@ -113,17 +146,14 @@ class ProgramMeta:
         return self.root / "smoke"
 
     def matches_query(self, q: str) -> bool:
-        if not q:
-            return True
-        needle = q.strip().lower()
-        hay = " ".join(
-            [
-                self.slug,
-                self.display_name,
-                *self.search_aliases,
-            ]
-        ).lower()
-        return needle in hay
+        return program_text_matches(
+            q,
+            self.slug,
+            self.display_name,
+            self.service_area_name,
+            self.service_area_short,
+            *self.search_aliases,
+        )
 
     def program_active(self, as_of: date) -> bool:
         if self.program_effective_from and as_of < date.fromisoformat(self.program_effective_from):

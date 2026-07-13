@@ -14,9 +14,11 @@ from rich.table import Table
 
 from src.api_client import AgentApiClient, AgentApiError
 from src.cli_display import format_assessment_card, should_show_assessment_card
+from src.cli_input import read_line
 from src.config import resolve_public_api_base
 from src.json_types import JsonObject, JsonValue
 from src.logging_config import configure_client_logging
+from src.programs.models import program_text_matches
 from src.retrieval.kb import Citation
 from src.state.models import Assessment, AssessmentStatus
 
@@ -139,6 +141,18 @@ def _print_assistant(
         )
 
 
+_PICKER_PAGE_SIZE = 10
+
+
+def _catalog_item_matches(item: JsonObject, query: str) -> bool:
+    return program_text_matches(
+        query,
+        str(item.get("slug") or ""),
+        str(item.get("display_name") or ""),
+        *_str_list(item.get("search_aliases")),
+    )
+
+
 def _pick_program(api: AgentApiClient, *, preselect: str | None = None) -> str:
     """Type-to-narrow program picker (or preselect slug)."""
     try:
@@ -160,39 +174,51 @@ def _pick_program(api: AgentApiClient, *, preselect: str | None = None) -> str:
         console.print(f"[dim]Program:[/dim] {catalog[0].get('display_name')} ([bold]{slug}[/bold])")
         return slug
 
-    console.print("[bold]Select a program[/bold] (type to filter, Enter to choose first match):")
+    console.print(
+        "[bold]Select a program[/bold] — type to filter, number to pick, "
+        "Enter for first match, [dim]/clear[/dim] to reset filter:"
+    )
     query = ""
     while True:
-        matches = [
-            p
-            for p in catalog
-            if not query
-            or query.lower() in str(p.get("display_name") or "").lower()
-            or query.lower() in str(p.get("slug") or "").lower()
-            or any(query.lower() in str(a).lower() for a in _str_list(p.get("search_aliases")))
-        ]
+        matches = [p for p in catalog if _catalog_item_matches(p, query)]
+        total = len(matches)
+        shown = matches[:_PICKER_PAGE_SIZE]
+        if query:
+            console.print(f"[dim]Filter:[/dim] [bold]{query}[/bold]")
         if not matches:
-            console.print("[dim]No matches — clear filter or try again.[/dim]")
+            console.print("[dim]No matches — try another filter or /clear.[/dim]")
         else:
-            for i, p in enumerate(matches[:10], start=1):
+            if total > _PICKER_PAGE_SIZE:
+                console.print(
+                    f"[dim]Showing top {_PICKER_PAGE_SIZE} of {total} matches — "
+                    f"narrow the filter to see the rest.[/dim]"
+                )
+            elif total > 1:
+                console.print(f"[dim]Showing {total} match(es).[/dim]")
+            for i, p in enumerate(shown, start=1):
                 eff = p.get("effective_to") or "open-ended"
                 console.print(
                     f"  [cyan]{i}.[/cyan] {p.get('display_name')} "
                     f"[dim]({p.get('slug')}) limits through {eff}[/dim]"
                 )
         try:
-            raw = console.input("[bold]Filter / number>[/bold] ").strip()
+            raw = read_line("Filter / number> ", history="picker")
         except (EOFError, KeyboardInterrupt):
             console.print("\nTake care.")
             sys.exit(0)
         if not raw:
-            if matches:
-                return str(matches[0].get("slug") or "")
+            if shown:
+                return str(shown[0].get("slug") or "")
+            continue
+        if raw.lower() in {"/clear", "clear", "*"}:
+            query = ""
             continue
         if raw.isdigit():
             idx = int(raw)
-            if 1 <= idx <= min(10, len(matches)):
-                return str(matches[idx - 1].get("slug") or "")
+            if 1 <= idx <= len(shown):
+                return str(shown[idx - 1].get("slug") or "")
+            console.print(f"[dim]Pick 1-{len(shown)} from the list above, or type a filter.[/dim]")
+            continue
         query = raw
 
 
@@ -319,7 +345,8 @@ def main(argv: list[str] | None = None) -> None:
 
         while True:
             try:
-                user = console.input("[bold cyan]You>[/bold cyan] ").strip()
+                # prompt_toolkit: arrows, history, Option/Ctrl+arrows for words
+                user = read_line("You> ", history="chat")
             except (EOFError, KeyboardInterrupt):
                 console.print("\nTake care.")
                 break

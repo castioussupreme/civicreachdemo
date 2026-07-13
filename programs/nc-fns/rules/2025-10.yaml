@@ -11,13 +11,24 @@ supporting_source_ids:
 description: >-
   Simplified NC FNS gross monthly income screen using the public 200% table.
   Not an official determination; DSS may apply a 130% test or other rules.
-max_gross_monthly_by_size:
-  1: 2610.0
-  2: 3526.0
-  3: 4442.0
-  4: 5360.0
-  5: 6276.0
-  6: 7194.0
-  7: 8112.0
-  8: 9030.0
-additional_member_increment: 918.0
+requirements:
+  - type: residency
+  - type: household_size
+    household_definition: buy_and_prepare_food
+  - type: gross_income_limit
+    max_gross_monthly_by_size:
+      1: 2610.0
+      2: 3526.0
+      3: 4442.0
+      4: 5360.0
+      5: 6276.0
+      6: 7194.0
+      7: 8112.0
+      8: 9030.0
+    additional_member_increment: 918.0
+    ask_gross_vs_net: true
+    ask_household_vs_individual: true
+    stricter_test_source_id: nc-fns-gross-income-tests
+  - type: student_soft_unable
+    source_id: nc-fns-student-rules
+  - type: elderly_disabled_caveat

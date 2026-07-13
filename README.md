@@ -47,7 +47,7 @@ make smoke PROGRAM=nc-fns   # live multi-scenario E2E (PROGRAM required)
 
 **Runtime path (single source of truth):** only the **agent** container runs `process_turn` (OpenAI, Redis, Qdrant, eligibility). **CLI and smoke are thin HTTP clients** against `PUBLIC_BASE_URL` (written to `.env.runtime` on stack start). They do not call the pipeline or OpenAI on the host.
 
-**Programs:** policy packs live under `programs/{slug}/` (rules YAML, knowledge, smoke). `src/` is reusable infrastructure. Sessions **pin** a program + ruleset at create (`GET /api/programs?q=` for discovery; CLI type-to-narrow picker). Switching programs means a **new session**. Qdrant is one collection with a **mandatory `program_slug` pre-filter** on every retrieve.
+**Programs:** policy packs live under `programs/{slug}/` (rules YAML, knowledge, smoke). `src/` is reusable infrastructure. Each ruleset declares **`requirements`** (typed modules: residency, household size, gross income limit, optional softeners). The planner and engine only collect and score what is declared — not a fixed SNAP interview. Sessions **pin** a program + ruleset at create (`GET /api/programs?q=` for discovery; CLI type-to-narrow picker). Switching programs means a **new session**. Qdrant is one collection with a **mandatory `program_slug` pre-filter** on every retrieve.
 
 | Pack          | Role                                                                                         |
 | ------------- | -------------------------------------------------------------------------------------------- |

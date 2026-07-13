@@ -12,13 +12,21 @@ supporting_source_ids:
 description: >-
   Informal CalFresh gross monthly income screen using the public 200% FPL table
   for FFY 2026. Not an official determination; county human services / CDSS decides.
-max_gross_monthly_by_size:
-  1: 2610.0
-  2: 3526.0
-  3: 4442.0
-  4: 5360.0
-  5: 6276.0
-  6: 7192.0
-  7: 8110.0
-  8: 9026.0
-additional_member_increment: 918.0
+requirements:
+  - type: residency
+  - type: household_size
+    household_definition: buy_and_prepare_food
+  - type: gross_income_limit
+    max_gross_monthly_by_size:
+      1: 2610.0
+      2: 3526.0
+      3: 4442.0
+      4: 5360.0
+      5: 6276.0
+      6: 7192.0
+      7: 8110.0
+      8: 9026.0
+    additional_member_increment: 918.0
+    ask_gross_vs_net: true
+    ask_household_vs_individual: true
+  - type: elderly_disabled_caveat

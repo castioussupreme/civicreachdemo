@@ -55,9 +55,13 @@ def test_income_doc_matches_ruleset_table() -> None:
             continue
         text = path.read_text(encoding="utf-8")
         assert rs.id in text or rs.effective_from in text
-        for size, amount in rs.max_gross_monthly_by_size.items():
+        table = rs.gross_income_table()
+        assert table is not None, f"{rs.id}: missing gross_income_limit requirement"
+        for size, amount in table.items():
             pretty = f"${amount:,.0f}" if float(amount) == int(amount) else f"${amount}"
             assert pretty in text or pretty.replace(",", "") in text or str(int(amount)) in text, (
                 f"{rs.id}: threshold for size {size} ({amount}) not found in {path.name}"
             )
-        assert str(int(rs.additional_member_increment)) in text
+        increment = rs.gross_income_increment()
+        assert increment is not None
+        assert str(int(increment)) in text

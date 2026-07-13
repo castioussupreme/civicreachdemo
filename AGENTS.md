@@ -6,12 +6,13 @@ POC NC FNS informal screening agent. Prefer small, correct changes over new infr
 
 - **Single runtime:** only the agent API runs `process_turn` (OpenAI, Redis, Qdrant, eligibility). CLI and smoke are HTTP clients via `AgentApiClient` / `PUBLIC_BASE_URL`.
 - **Hybrid control:** LLM extracts language and composes replies; **code** owns safety, case state, planner, and eligibility math.
-- **RAG is citations only:** retrieval must not invent dollar thresholds. Thresholds come from `RULESET` in code.
+- **RAG is citations only:** retrieval must not invent dollar thresholds. Dollar math comes from declared requirement modules (e.g. `gross_income_limit` table in rules YAML).
+- **Requirement modules:** planner + engine only collect/score what each ruleset lists under `requirements:`. No silent feature flags from “key present.”
 
 ## Program packs
 
 - Policy data lives under `programs/{slug}/` (rules YAML, knowledge, smoke).
-- **`src/` is program-agnostic** infrastructure (pipeline, API, Qdrant, registry).
+- **`src/` is program-agnostic** infrastructure (pipeline, API, Qdrant, registry, **requirement modules**).
 - Registry: `programs/registry.yaml` lists enabled packs. **No default program** — session create, smoke, and retrieve all require an explicit `program_slug`.
 - Second pack `ca-calfresh` is a real public program (California CalFresh / SNAP) for multi-program scale.
 - Sessions pin `program_slug` + `ruleset_id` at create; do not switch program mid-session.
@@ -19,12 +20,19 @@ POC NC FNS informal screening agent. Prefer small, correct changes over new infr
 
 ### How to add a program
 
-1. Create `programs/{slug}/program.yaml` (display name, `search_aliases`, opening message).
-2. Add `rules/*.yaml` with thresholds, `effective_from` / `effective_to` (null = open-ended), `source_id`, optional `supporting_source_ids`.
-3. Add `knowledge/manifest.json` + markdown (dual-copy income table with the rules YAML).
+1. Create `programs/{slug}/program.yaml` (display name, `search_aliases`, opening message, service area).
+2. Add `rules/*.yaml` with `effective_from` / `effective_to` (null = open-ended), `source_id`, optional `supporting_source_ids`, and a non-empty **`requirements`** list (compose existing module types + params).
+3. Add `knowledge/manifest.json` + markdown (dual-copy income table when using `gross_income_limit`).
 4. Optional `smoke/scenarios.yaml` (+ optional line-oriented script files).
 5. Register the slug in `programs/registry.yaml`.
 6. `make index` + `make test` (+ `make smoke PROGRAM={slug}` when live).
+
+### How to add a requirement module type
+
+1. Implement `RequirementModule` under `src/eligibility/modules/` (`validate`, `missing`, `assess`).
+2. Register it in `src/eligibility/modules/__init__.py` (`MODULE_REGISTRY`).
+3. Reference `type: your_type` from pack rules YAML with validated params.
+4. Add unit tests (loader rejects bad params; planner/engine respect declaration).
 
 ## Dual copy of income thresholds (intentional, per pack)
 

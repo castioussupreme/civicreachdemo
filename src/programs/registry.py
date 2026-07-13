@@ -155,37 +155,39 @@ def _opt_str(value: object) -> str | None:
 
 
 def _ruleset_from_yaml(path: Path, *, program_slug: str) -> Ruleset:
+    # Lazy: avoids import cycle state → registry → modules → state
+    from src.eligibility.modules import parse_requirements  # noqa: PLC0415
+
     data = _load_yaml(path)
-    table_raw = data.get("max_gross_monthly_by_size") or {}
-    table: dict[int, float] = {}
-    if isinstance(table_raw, dict):
-        for k, v in table_raw.items():
-            table[int(str(k))] = float(str(v))
+    if "max_gross_monthly_by_size" in data or "additional_member_increment" in data:
+        raise ValueError(
+            f"{path.name}: top-level max_gross_monthly_by_size / "
+            "additional_member_increment removed — nest under requirements "
+            "type gross_income_limit"
+        )
     eff_to = data.get("effective_to")
     effective_to: str | None
     if eff_to is None or eff_to == "" or str(eff_to).lower() == "null":
         effective_to = None
     else:
         effective_to = str(eff_to)
-    inc_raw = data.get("additional_member_increment")
-    try:
-        increment = float(str(inc_raw if inc_raw is not None else 0))
-    except ValueError:
-        increment = 0.0
     support_raw = data.get("supporting_source_ids") or []
     supporting: list[str] = []
     if isinstance(support_raw, list):
         supporting = [str(s) for s in support_raw if str(s).strip()]
+    try:
+        requirements = parse_requirements(data.get("requirements"))
+    except ValueError as exc:
+        raise ValueError(f"{path.name}: {exc}") from exc
     return Ruleset(
         id=str(data["id"]),
         effective_from=str(data["effective_from"]),
         effective_to=effective_to,
         source_id=str(data.get("source_id") or ""),
         description=str(data.get("description") or ""),
-        max_gross_monthly_by_size=table,
-        additional_member_increment=increment,
         program_slug=program_slug,
         supporting_source_ids=tuple(supporting),
+        requirements=requirements,
     )
 
 

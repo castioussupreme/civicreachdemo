@@ -1,25 +1,18 @@
+"""Eligibility orchestrator: run declared requirement modules only."""
+
 from __future__ import annotations
 
+from pathlib import Path
+
+from src.eligibility.modules import SOFT_MODULE_TYPES, ModuleOutcome, get_module
 from src.eligibility.ruleset import Ruleset
+from src.programs.models import ProgramMeta
 from src.programs.registry import get_program, get_ruleset_by_id
 from src.state.models import (
     Assessment,
     AssessmentStatus,
     EligibilityCase,
-    FieldStatus,
 )
-
-
-def _service_area(case: EligibilityCase) -> tuple[str, str]:
-    """Return (full name, display name) for residency messaging."""
-    slug = (case.program_slug or "").strip()
-    if not slug:
-        return "the program service area", "this program"
-    try:
-        prog = get_program(slug)
-        return prog.service_area_name, prog.display_name
-    except Exception:
-        return "the program service area", "this program"
 
 
 def _ruleset_for_case(case: EligibilityCase, ruleset: Ruleset | None) -> Ruleset:
@@ -37,12 +30,27 @@ def calculate_eligibility(
     ruleset: Ruleset | None = None,
 ) -> Assessment:
     """
-    Deterministic screening assessment.
-    Pure function of case state + versioned ruleset (pinned on the case when set).
+    Deterministic screening assessment driven by ruleset.requirements.
+
+    Pure function of case state + pinned ruleset modules.
     """
     ruleset = _ruleset_for_case(case, ruleset)
-    source_ids = [ruleset.source_id, *ruleset.supporting_source_ids]
-    caveats: list[str] = [
+    try:
+        program = get_program(ruleset.program_slug or case.program_slug)
+    except Exception:
+        program = ProgramMeta(
+            slug=case.program_slug or "unknown",
+            display_name=case.program_slug or "program",
+            search_aliases=(),
+            program_effective_from=None,
+            program_effective_to=None,
+            opening_message="",
+            root=Path(),
+            service_area_name="the program service area",
+            service_area_short="this program",
+        )
+
+    base_caveats: list[str] = [
         "This is an informal screening only—not an official DSS determination.",
         (
             f"Ruleset {ruleset.id} effective from {ruleset.effective_from}"
@@ -50,244 +58,86 @@ def calculate_eligibility(
             + "."
         ),
     ]
-    # NC FNS-style 130% note only when that supporting doc is declared on the pack
-    if "nc-fns-gross-income-tests" in ruleset.supporting_source_ids:
-        caveats.append(
-            "Some households may face a stricter (~130%) gross income test; only DSS "
-            "decides which test applies (this screen uses the public 200% table only)."
-        )
+
     reasons: list[str] = []
+    source_ids: list[str] = []
+    caveats: list[str] = list(base_caveats)
+    threshold_used: float | None = None
+    monthly: float | None = None
+    household_size: int | None = None
 
-    area, program_name = _service_area(case)
+    had_fail = False
+    had_unable = False
+    unable_reasons: list[str] = []
 
-    # Residency hard gate for the program's service area
-    if case.lives_in_nc.status == FieldStatus.KNOWN and case.lives_in_nc.value is False:
-        overview = next(
-            (s for s in ruleset.supporting_source_ids if "overview" in s),
-            ruleset.supporting_source_ids[0]
-            if ruleset.supporting_source_ids
-            else ruleset.source_id,
-        )
-        return Assessment(
-            status=AssessmentStatus.LIKELY_INELIGIBLE,
-            reasons=[
-                f"User indicated they do not live in {area}; "
-                f"{program_name} is for {area} residents."
-            ],
-            rule_version=ruleset.id,
-            source_ids=[*source_ids, overview],
-            caveats=[*caveats, "Other jurisdictions administer their own assistance programs."],
-        )
-
-    if not case.lives_in_nc.is_usable():
-        return Assessment(
-            status=AssessmentStatus.NEEDS_MORE_INFORMATION,
-            reasons=[f"{area} residency has not been confirmed."],
-            rule_version=ruleset.id,
-            source_ids=source_ids,
-            caveats=caveats,
+    for spec in ruleset.requirements:
+        if had_fail and spec.type not in SOFT_MODULE_TYPES:
+            continue
+        module = get_module(spec.type)
+        result = module.assess(
+            case,
+            spec,
+            program=program,
+            ruleset=ruleset,
+            ruleset_source_id=ruleset.source_id,
+            supporting_source_ids=ruleset.supporting_source_ids,
         )
 
-    if not case.household_size.is_usable():
-        return Assessment(
-            status=AssessmentStatus.NEEDS_MORE_INFORMATION,
-            reasons=["Household size is missing or not confirmed."],
-            rule_version=ruleset.id,
-            source_ids=source_ids,
-            caveats=caveats,
-        )
+        for sid in result.source_ids:
+            if sid and sid not in source_ids:
+                source_ids.append(sid)
+        caveats.extend(result.caveats)
+        if result.threshold_used is not None:
+            threshold_used = result.threshold_used
+        if result.normalized_gross_monthly is not None:
+            monthly = result.normalized_gross_monthly
+        if result.household_size is not None:
+            household_size = result.household_size
 
-    # Income readiness
-    income_status = case.normalized_gross_monthly.status
-    if income_status == FieldStatus.UNKNOWN or case.normalized_gross_monthly.value is None:
-        if case.income_amount.status == FieldStatus.UNCERTAIN:
+        if result.outcome == ModuleOutcome.NEED_MORE:
             return Assessment(
                 status=AssessmentStatus.NEEDS_MORE_INFORMATION,
-                reasons=[
-                    "Income was stated approximately; need a clearer amount "
-                    "and whether it is daily/weekly/monthly and gross household income."
-                ],
+                reasons=list(result.reasons) or ["Need more information to complete screening."],
                 rule_version=ruleset.id,
-                source_ids=[*source_ids, "nc-fns-income-limits"],
-                caveats=caveats,
+                source_ids=list(dict.fromkeys(source_ids)),
+                caveats=list(dict.fromkeys(caveats)),
+                threshold_used=threshold_used,
+                normalized_gross_monthly=monthly,
+                household_size=household_size,
             )
-        return Assessment(
-            status=AssessmentStatus.NEEDS_MORE_INFORMATION,
-            reasons=["Gross household monthly income is not yet established."],
-            rule_version=ruleset.id,
-            source_ids=[*source_ids, "nc-fns-income-limits"],
-            caveats=caveats,
-        )
 
-    size_val = case.household_size.value
-    monthly_val = case.normalized_gross_monthly.value
-    if size_val is None or monthly_val is None:
-        return Assessment(
-            status=AssessmentStatus.NEEDS_MORE_INFORMATION,
-            reasons=["Household size or income value missing after validation."],
-            rule_version=ruleset.id,
-            source_ids=source_ids,
-            caveats=caveats,
-        )
-    size = int(size_val)
-    monthly = float(monthly_val)
-    threshold = ruleset.threshold_for_household(size)
+        if result.outcome == ModuleOutcome.FAIL:
+            had_fail = True
+            reasons.extend(result.reasons)
+            continue
 
-    # Uncertain normalized income (net take-home and/or individual-only in multi-person HH)
-    if income_status == FieldStatus.UNCERTAIN:
-        return _assess_uncertain_income(
-            case=case,
-            monthly=monthly,
-            size=size,
-            threshold=threshold,
-            ruleset=ruleset,
-            source_ids=source_ids,
-            caveats=caveats,
-        )
+        if result.outcome == ModuleOutcome.UNABLE:
+            had_unable = True
+            unable_reasons.extend(result.reasons)
+            reasons.extend(result.reasons)
+            continue
 
-    # Gross income comparison (confirmed gross household)
-    under = monthly <= threshold
-    if under:
-        reasons.append(
-            f"Normalized gross monthly income ${monthly:,.2f} is at or below "
-            f"the public screening threshold ${threshold:,.2f} for a household of {size}."
-        )
-        status = AssessmentStatus.LIKELY_ELIGIBLE
-    else:
-        reasons.append(
-            f"Normalized gross monthly income ${monthly:,.2f} is above "
-            f"the public screening threshold ${threshold:,.2f} for a household of {size}."
-        )
+        # PASS / SKIP
+        reasons.extend(result.reasons)
+
+    if had_fail:
         status = AssessmentStatus.LIKELY_INELIGIBLE
-
-    # Student: income screen only — full exemptions live in knowledge/nc-fns-student-rules.md
-    # (not modeled in code). Keep that policy doc aligned if this behavior changes. See AGENTS.md.
-    if case.is_student.is_usable() and case.is_student.value is True:
-        source_ids = [*source_ids, "nc-fns-student-rules"]
-        caveats.append(
-            "College student rules are not fully modeled here. Students often need an "
-            "additional exemption beyond the income screen; DSS or campus outreach must decide."
-        )
-        if status == AssessmentStatus.LIKELY_ELIGIBLE:
-            status = AssessmentStatus.UNABLE_TO_DETERMINE
-            reasons.append(
-                "On the simple gross-income table alone this would look like a pass, "
-                "but student-specific FNS rules are not evaluated by this tool — "
-                "so overall we cannot give a confident screening result."
-            )
-        else:
-            reasons.append(
-                "Student status does not change a failed gross-income screen on this tool."
-            )
-
-    if case.elderly_or_disabled_member.is_usable() and case.elderly_or_disabled_member.value:
-        caveats.append(
-            "Household may include elderly or disabled members; DSS may apply "
-            "different resource or income treatment not modeled here."
-        )
+    elif had_unable:
+        status = AssessmentStatus.UNABLE_TO_DETERMINE
+        if not reasons:
+            reasons = unable_reasons or ["Unable to determine from this simple screen."]
+    else:
+        status = AssessmentStatus.LIKELY_ELIGIBLE
+        if not reasons:
+            reasons = ["Screening requirements were met for this informal check."]
 
     return Assessment(
         status=status,
-        reasons=reasons,
+        reasons=list(dict.fromkeys(reasons)),
         rule_version=ruleset.id,
         source_ids=list(dict.fromkeys(source_ids)),
-        threshold_used=threshold,
+        threshold_used=threshold_used,
         normalized_gross_monthly=monthly,
-        household_size=size,
-        caveats=caveats,
-    )
-
-
-def _assess_uncertain_income(
-    *,
-    case: EligibilityCase,
-    monthly: float,
-    size: int,
-    threshold: float,
-    ruleset: Ruleset,
-    source_ids: list[str],
-    caveats: list[str],
-) -> Assessment:
-    is_net = case.gross_or_net.is_usable() and case.gross_or_net.value == "net"
-    is_individual = (
-        case.household_or_individual.is_usable()
-        and case.household_or_individual.value == "individual"
-        and size > 1
-    )
-
-    # Safe lower-bound math (no tax brackets, no inventing other members' pay):
-    # true gross household income ≥ stated take-home, and ≥ stated individual income.
-    if monthly > threshold and (is_net or is_individual):
-        if is_net and is_individual:
-            bound_why = (
-                f"You shared take-home income for one person of about ${monthly:,.2f}/month. "
-                f"Full household before-tax income is at least that high."
-            )
-        elif is_net:
-            bound_why = (
-                f"You shared take-home (after-tax) income of about ${monthly:,.2f}/month. "
-                f"Before-tax income is at least that high."
-            )
-        else:
-            bound_why = (
-                f"You shared one person's income of about ${monthly:,.2f}/month. "
-                f"Total household income is at least that high."
-            )
-        return Assessment(
-            status=AssessmentStatus.LIKELY_INELIGIBLE,
-            reasons=[
-                f"{bound_why} The public gross limit for a household of {size} is "
-                f"${threshold:,.2f} — so this simple screen points to likely not eligible."
-            ],
-            rule_version=ruleset.id,
-            source_ids=[*source_ids, "nc-fns-income-limits"],
-            threshold_used=threshold,
-            normalized_gross_monthly=monthly,
-            household_size=size,
-            caveats=[
-                *caveats,
-                "Bound uses a lower bound on income (take-home and/or one person only); "
-                "no tax reverse-calculation or invented household totals.",
-            ],
-        )
-
-    extra: list[str] = []
-    if is_net:
-        extra.append(
-            "Income was given as take-home (after taxes). This screen compares "
-            "before-tax (gross) income to the public table. We do not reverse-calculate "
-            "gross from tax brackets — that would be guesswork."
-        )
-        source_ids = [*source_ids, "nc-fns-income-limits"]
-    if is_individual:
-        extra.append(
-            "Income may be for one person only; screening needs total household income "
-            "for everyone who buys and prepares food together. We do not invent "
-            "other members' earnings."
-        )
-        source_ids = [*source_ids, "nc-fns-income-limits"]
-
-    parts: list[str] = []
-    if is_net:
-        parts.append("take-home")
-    if is_individual:
-        parts.append("one-person")
-    label = " / ".join(parts) if parts else "provisional"
-
-    return Assessment(
-        status=AssessmentStatus.UNABLE_TO_DETERMINE,
-        reasons=extra or ["Income details are too uncertain to complete a reliable gross screen."],
-        rule_version=ruleset.id,
-        source_ids=list(dict.fromkeys([*source_ids, "nc-fns-income-limits"])),
-        threshold_used=threshold,
-        normalized_gross_monthly=monthly,
-        household_size=size,
-        caveats=[
-            *caveats,
-            f"Your {label} amount normalized to about ${monthly:,.2f}/month "
-            f"(not confirmed full gross household income). Public gross threshold for "
-            f"household of {size}: ${threshold:,.2f}. "
-            f"If you know approximate before-tax total household income, we can re-run "
-            f"this simple screen; otherwise DSS can review a full application.",
-        ],
+        household_size=household_size,
+        caveats=list(dict.fromkeys(caveats)),
     )

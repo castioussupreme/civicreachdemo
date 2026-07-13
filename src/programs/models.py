@@ -6,6 +6,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.eligibility.modules.base import RequirementSpec
 
 
 @dataclass(frozen=True)
@@ -14,6 +18,7 @@ class Ruleset:
     Versioned screening rules for one program.
 
     effective_to is None when open-ended (no known end date).
+    Eligibility shape is entirely driven by ``requirements``.
     """
 
     id: str
@@ -21,20 +26,46 @@ class Ruleset:
     effective_to: str | None
     source_id: str
     description: str
-    max_gross_monthly_by_size: Mapping[int, float]
-    additional_member_increment: float
-    program_slug: str = ""
-    # Optional RAG source ids declared on the pack (not hardcoded NC FNS names)
-    supporting_source_ids: tuple[str, ...] = ()
+    program_slug: str
+    supporting_source_ids: tuple[str, ...]
+    requirements: tuple[RequirementSpec, ...]
+
+    def requirement_of_type(self, type_id: str) -> RequirementSpec | None:
+        for req in self.requirements:
+            if req.type == type_id:
+                return req
+        return None
+
+    def gross_income_table(self) -> Mapping[int, float] | None:
+        req = self.requirement_of_type("gross_income_limit")
+        if req is None:
+            return None
+        table = req.params.get("max_gross_monthly_by_size")
+        if not isinstance(table, dict):
+            return None
+        return {int(k): float(v) for k, v in table.items()}
+
+    def gross_income_increment(self) -> float | None:
+        req = self.requirement_of_type("gross_income_limit")
+        if req is None:
+            return None
+        raw = req.params.get("additional_member_increment")
+        if raw is None:
+            return 0.0
+        return float(str(raw))
 
     def threshold_for_household(self, size: int) -> float:
-        if size < 1:
-            raise ValueError("household size must be >= 1")
-        table = {int(k): float(v) for k, v in self.max_gross_monthly_by_size.items()}
-        if size in table:
-            return table[size]
-        base = table[8]
-        return base + (size - 8) * float(self.additional_member_increment)
+        """Convenience when a gross_income_limit module is declared; else raises."""
+        # Local import avoids programs ↔ eligibility package cycle at import time.
+        from src.eligibility.thresholds import (  # noqa: PLC0415
+            threshold_for_household as thr_fn,
+        )
+
+        table = self.gross_income_table()
+        increment = self.gross_income_increment()
+        if table is None or increment is None:
+            raise ValueError(f"ruleset {self.id} has no gross_income_limit requirement")
+        return thr_fn(table, increment, size)
 
     def effective_from_date(self) -> date:
         return date.fromisoformat(self.effective_from)
@@ -66,7 +97,6 @@ class ProgramMeta:
     program_effective_to: str | None
     opening_message: str
     root: Path
-    # Jurisdiction for residency gate (e.g. "North Carolina", "California")
     service_area_name: str = ""
     service_area_short: str = ""
 

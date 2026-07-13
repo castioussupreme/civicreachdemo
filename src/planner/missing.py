@@ -1,8 +1,11 @@
+"""Planner: collect missing fields from declared requirement modules only."""
+
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import dataclass
 
-from src.eligibility.income import normalize_to_monthly
+from src.eligibility.modules import get_module
 from src.programs.registry import get_program, get_ruleset_by_id
 from src.state.models import EligibilityCase, FieldStatus, Stage
 
@@ -16,60 +19,12 @@ class PlanResult:
     open_contradictions: list[str]
 
 
-# Household wording: "buy and prepare food together" (SNAP-style). See AGENTS.md.
-
-
-def _service_area(case: EligibilityCase) -> str:
-    slug = (case.program_slug or "").strip()
-    if not slug:
-        return "the program service area"
-    try:
-        return get_program(slug).service_area_name
-    except Exception:
-        return "the program service area"
-
-
-def _question_hints(case: EligibilityCase) -> dict[str, str]:
-    area = _service_area(case)
-    return {
-        "lives_in_nc": f"Do you currently live in {area}?",
-        "household_size": (
-            "How many people buy and prepare food together with you (including yourself)?"
-        ),
-        "income_amount": (
-            "About how much income does your household get before taxes? "
-            "A round number is fine — per day, weekly, every two weeks, twice a month, "
-            "monthly, or yearly."
-        ),
-        "income_amount_clarify": (
-            "I want to make sure I have the right income figure. "
-            "About how much is it, and is that per day, weekly, every two weeks, "
-            "twice a month, monthly, or yearly?"
-        ),
-        "income_period": (
-            "Is that amount per day, weekly, every two weeks, twice a month "
-            "(like the 1st and 15th), monthly, or yearly?"
-        ),
-        "gross_or_net": ("Is that roughly before taxes, or take-home pay after taxes?"),
-        "household_or_individual": (
-            "Is that the total for everyone in the household, or just your income?"
-        ),
-        "approx_gross": (
-            "This screen uses income before taxes (gross), not take-home pay. "
-            "About how much is that amount before taxes, if you know? "
-            "A rough number is fine — or say if you only know take-home."
-        ),
-        "approx_household_total": (
-            "This screen needs total household income for everyone who buys and prepares "
-            "food together — not just one person's pay. "
-            "About how much is the household total before taxes, if you know? "
-            "A rough number is fine — or say if you only know your own."
-        ),
-    }
-
-
 def _field_labels(case: EligibilityCase) -> dict[str, str]:
-    area = _service_area(case)
+    area = "the program service area"
+    slug = (case.program_slug or "").strip()
+    if slug:
+        with suppress(Exception):
+            area = get_program(slug).service_area_name or area
     return {
         "lives_in_nc": f"whether you live in {area}",
         "household_size": "household size",
@@ -95,53 +50,6 @@ def _conflict_question(case: EligibilityCase, field: str) -> str:
     return f"I noticed a possible change about {label}. Which value should I use going forward?"
 
 
-def _stated_monthly(case: EligibilityCase) -> float | None:
-    """Monthly figure from amount+period (gross or take-home — whatever they stated)."""
-    if not case.income_amount.is_usable() or not case.income_period.is_usable():
-        return None
-    amount = case.income_amount.value
-    period = case.income_period.value
-    if amount is None or period is None:
-        return None
-    return normalize_to_monthly(float(amount), period)
-
-
-def _threshold(case: EligibilityCase) -> float | None:
-    if not case.household_size.is_usable() or case.household_size.value is None:
-        return None
-    slug = (case.program_slug or "").strip()
-    rid = (case.ruleset_id or "").strip()
-    if not slug or not rid:
-        return None
-    try:
-        ruleset = get_ruleset_by_id(slug, rid)
-    except Exception:
-        return None
-    return ruleset.threshold_for_household(int(case.household_size.value))
-
-
-def _stated_monthly_exceeds_threshold(case: EligibilityCase) -> bool:
-    monthly = _stated_monthly(case)
-    thr = _threshold(case)
-    if monthly is None or thr is None:
-        return False
-    return monthly > thr
-
-
-def _is_net(case: EligibilityCase) -> bool:
-    return case.gross_or_net.is_usable() and case.gross_or_net.value == "net"
-
-
-def _is_individual_multi(case: EligibilityCase) -> bool:
-    if not case.household_or_individual.is_usable():
-        return False
-    if case.household_or_individual.value != "individual":
-        return False
-    if not case.household_size.is_usable() or case.household_size.value is None:
-        return False
-    return int(case.household_size.value) > 1
-
-
 def determine_missing_fields(case: EligibilityCase) -> PlanResult:
     open_conflicts = [c.field for c in case.contradictions if not c.resolved]
     if open_conflicts:
@@ -154,15 +62,31 @@ def determine_missing_fields(case: EligibilityCase) -> PlanResult:
             open_contradictions=open_conflicts,
         )
 
-    missing: list[str] = []
-    hint_overrides: dict[str, str] = {}
+    slug = (case.program_slug or "").strip()
+    rid = (case.ruleset_id or "").strip()
+    if not slug or not rid:
+        return PlanResult(
+            missing_fields=["program"],
+            stage=Stage.CLARIFYING,
+            next_question_hint="I need a program selected before we can continue.",
+            ready_to_assess=False,
+            open_contradictions=[],
+        )
 
-    if case.lives_in_nc.status in (FieldStatus.UNKNOWN, FieldStatus.UNCERTAIN):
-        missing.append("lives_in_nc")
-        if case.lives_in_nc.status == FieldStatus.UNCERTAIN:
-            area = _service_area(case)
-            hint_overrides["lives_in_nc"] = f"Just to confirm — do you currently live in {area}?"
-    elif case.lives_in_nc.is_usable() and case.lives_in_nc.value is False:
+    try:
+        ruleset = get_ruleset_by_id(slug, rid)
+        program = get_program(slug)
+    except Exception:
+        return PlanResult(
+            missing_fields=["program"],
+            stage=Stage.CLARIFYING,
+            next_question_hint="I could not load this program's rules. Please start a new session.",
+            ready_to_assess=False,
+            open_contradictions=[],
+        )
+
+    # Residency hard-fail: assess without collecting further fields.
+    if case.lives_in_nc.is_usable() and case.lives_in_nc.value is False:
         return PlanResult(
             missing_fields=[],
             stage=Stage.READY_TO_ASSESS,
@@ -171,55 +95,17 @@ def determine_missing_fields(case: EligibilityCase) -> PlanResult:
             open_contradictions=[],
         )
 
-    if case.household_size.status in (FieldStatus.UNKNOWN, FieldStatus.UNCERTAIN):
-        missing.append("household_size")
-        if case.household_size.status == FieldStatus.UNCERTAIN:
-            hint_overrides["household_size"] = (
-                "About how many people buy and prepare food together with you "
-                "(including yourself)? A clear number helps."
-            )
+    missing_keys: list[str] = []
+    hints: dict[str, str] = {}
+    for spec in ruleset.requirements:
+        module = get_module(spec.type)
+        for item in module.missing(case, spec, program=program):
+            if item.field_key not in missing_keys:
+                missing_keys.append(item.field_key)
+                hints[item.field_key] = item.question_hint
 
-    if case.income_amount.status == FieldStatus.UNKNOWN:
-        missing.append("income_amount")
-    elif case.income_amount.status == FieldStatus.UNCERTAIN:
-        # Approximate ("about $2,500") — clarify, don't treat as ready
-        missing.append("income_amount_clarify")
-
-    if case.income_amount.is_usable() and case.income_period.status in (
-        FieldStatus.UNKNOWN,
-        FieldStatus.UNCERTAIN,
-    ):
-        missing.append("income_period")
-
-    if case.income_amount.is_usable() and case.gross_or_net.status == FieldStatus.UNKNOWN:
-        missing.append("gross_or_net")
-
-    if (
-        case.household_size.is_usable()
-        and case.household_size.value is not None
-        and int(case.household_size.value) > 1
-        and case.income_amount.is_usable()
-        and case.household_or_individual.status == FieldStatus.UNKNOWN
-    ):
-        missing.append("household_or_individual")
-
-    # --- One-shot follow-ups when income is incomplete (no invented math) ---
-    # Order: pre-tax first, then household total. Skip follow-up if stated
-    # amount alone already exceeds the gross threshold (safe lower bound).
-    base_complete = not missing
-    uncertain_norm = case.normalized_gross_monthly.status == FieldStatus.UNCERTAIN
-    exceeds = _stated_monthly_exceeds_threshold(case)
-
-    if base_complete and uncertain_norm and not exceeds:
-        if _is_net(case) and not case.asked_for_gross_amount:
-            missing.append("approx_gross")
-        elif _is_individual_multi(case) and not case.asked_for_household_total:
-            missing.append("approx_household_total")
-
-    income_ready = case.normalized_gross_monthly.status == FieldStatus.KNOWN
-
-    if missing:
-        primary = missing[0]
+    if missing_keys:
+        primary = missing_keys[0]
         stage = Stage.INTRODUCTION if case.turn_count <= 1 else Stage.COLLECTING
         clarifying_keys = {
             "approx_gross",
@@ -243,23 +129,11 @@ def determine_missing_fields(case: EligibilityCase) -> PlanResult:
         ):
             stage = Stage.CLARIFYING
 
-        hint = hint_overrides.get(primary) or _question_hints(case).get(
-            primary, "Could you tell me more?"
-        )
         return PlanResult(
-            missing_fields=missing,
+            missing_fields=missing_keys,
             stage=stage,
-            next_question_hint=hint,
+            next_question_hint=hints.get(primary, "Could you tell me more?"),
             ready_to_assess=False,
-            open_contradictions=[],
-        )
-
-    if not income_ready:
-        return PlanResult(
-            missing_fields=[],
-            stage=Stage.READY_TO_ASSESS,
-            next_question_hint="",
-            ready_to_assess=True,
             open_contradictions=[],
         )
 

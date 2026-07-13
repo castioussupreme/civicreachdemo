@@ -23,6 +23,16 @@
       "notes": "Public screening table labeled Maximum Gross Monthly Income (200%). Some households may face a 130% test determined by DSS."
     },
     {
+      "id": "nc-fns-gross-income-tests",
+      "title": "Gross income tests (200% screening table vs 130%)",
+      "file": "nc-fns-gross-income-tests.md",
+      "url": "https://morefood.org/using-snap/am-i-eligible/",
+      "publisher": "More In My Basket (NC State / USDA-funded outreach)",
+      "effective_from": "2025-10-01",
+      "effective_to": "2026-09-30",
+      "notes": "Explains 200% vs ~130% gross tests for RAG. POC math uses only the 200% table; DSS chooses which test applies."
+    },
+    {
       "id": "nc-fns-general-requirements",
       "title": "General FNS requirements (residency, income, status)",
       "file": "nc-fns-general-requirements.md",

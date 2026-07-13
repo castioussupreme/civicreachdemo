@@ -17,10 +17,23 @@ def test_manifest_lists_expected_sources() -> None:
     assert RULESET.source_id in ids
     assert "agent-disclaimer" in ids
     assert "nc-fns-general-requirements" in ids
+    assert "nc-fns-gross-income-tests" in ids
     for src in manifest["sources"]:
         path = KNOWLEDGE / src["file"]
         assert path.is_file(), f"missing knowledge file {src['file']}"
         assert path.read_text(encoding="utf-8").strip()
+
+
+def test_gross_income_tests_doc_explains_200_vs_130() -> None:
+    """RAG fodder for 'which test?' — no second dollar table (math stays on 200% ruleset)."""
+    text = (KNOWLEDGE / "nc-fns-gross-income-tests.md").read_text(encoding="utf-8")
+    assert "200%" in text
+    assert "130%" in text
+    assert "DSS" in text
+    assert "does **not**" in text or "does not" in text.lower()
+    assert "morefood.org" in text
+    # No parallel 130% dollar schedule — math stays on the 200% RULESET table only
+    assert "$" not in text
 
 
 def test_income_doc_matches_ruleset_table() -> None:

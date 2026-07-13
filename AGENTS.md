@@ -50,12 +50,12 @@ Keep cross-references in place:
 
 Not engine math, but keep consistent when editing:
 
-| Fact                                       | Code                                            | Knowledge / copy                                                    |
-| ------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------- |
-| ePASS apply URL                            | `src/safety/checks.py` (`APPLICATION_RESPONSE`) | `knowledge/nc-fns-how-to-apply.md`, `knowledge/agent-disclaimer.md` |
-| Household “buy and prepare food together”  | `src/planner/missing.py` question hints         | `knowledge/nc-fns-general-requirements.md`                          |
-| Student complexity (no full determination) | `src/eligibility/engine.py` student branch      | `knowledge/nc-fns-student-rules.md`                                 |
-| 130% / DSS caveat                          | engine caveats + ruleset description            | income-limits + general-requirements docs                           |
+| Fact                                       | Code                                                     | Knowledge / copy                                                    |
+| ------------------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------- |
+| ePASS apply URL                            | `src/safety/checks.py` (`APPLICATION_RESPONSE`)          | `knowledge/nc-fns-how-to-apply.md`, `knowledge/agent-disclaimer.md` |
+| Household “buy and prepare food together”  | `src/planner/missing.py` question hints                  | `knowledge/nc-fns-general-requirements.md`                          |
+| Student complexity (no full determination) | `src/eligibility/engine.py` student branch               | `knowledge/nc-fns-student-rules.md`                                 |
+| 130% vs 200% “which test?”                 | engine caveats + `source_ids` include gross-income-tests | `knowledge/nc-fns-gross-income-tests.md` (RAG only; no 130% math)   |
 
 ## Quality bar
 

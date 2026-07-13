@@ -107,6 +107,9 @@ def test_household_of_four_screen() -> None:
     )
     assert calculate_eligibility(under).status == AssessmentStatus.LIKELY_ELIGIBLE
     assert calculate_eligibility(over).status == AssessmentStatus.LIKELY_INELIGIBLE
+    # Supporting policy can ground 200% vs 130% without inventing a second table
+    assert "nc-fns-gross-income-tests" in calculate_eligibility(under).source_ids
+    assert "nc-fns-income-limits" in calculate_eligibility(under).source_ids
 
 
 def test_not_in_nc() -> None:

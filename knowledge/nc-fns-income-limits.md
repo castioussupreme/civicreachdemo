@@ -14,6 +14,7 @@
 
 - The public table below is labeled **Maximum Gross Monthly Income (200%)**.
 - **Some individuals must meet standard gross income limits (130%)**, and **DSS will make this determination**.
+  See also knowledge source **`nc-fns-gross-income-tests`** for a plain-language “which test?” note (this tool still only *computes* against the 200% table).
 - Meeting the gross income screen means a household **may** be eligible—not that they are approved.
 - Official eligibility also considers household composition, resources, citizenship/immigration status, and other rules this POC does not fully evaluate.
 

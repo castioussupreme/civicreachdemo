@@ -17,11 +17,17 @@ def calculate_eligibility(
     Deterministic screening assessment.
     Pure function of case state + versioned ruleset.
     """
-    source_ids = [ruleset.source_id, "agent-disclaimer", "nc-fns-general-requirements"]
+    source_ids = [
+        ruleset.source_id,
+        "nc-fns-gross-income-tests",
+        "agent-disclaimer",
+        "nc-fns-general-requirements",
+    ]
     caveats: list[str] = [
         "This is an informal screening only—not an official DSS determination.",
         (f"Ruleset {ruleset.id} effective {ruleset.effective_from} to {ruleset.effective_to}."),
-        "Some households may face a different (e.g. 130%) gross income test; DSS decides.",
+        "Some households may face a stricter (~130%) gross income test; only DSS "
+        "decides which test applies (this screen uses the public 200% table only).",
     ]
     reasons: list[str] = []
 

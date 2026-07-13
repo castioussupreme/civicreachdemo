@@ -23,8 +23,17 @@ def test_corpus_loads() -> None:
     docs = load_corpus()
     ids = {d.id for d in docs}
     assert "nc-fns-income-limits" in ids
+    assert "nc-fns-gross-income-tests" in ids
     assert "agent-disclaimer" in ids
     assert all(d.text.strip() for d in docs)
+
+
+def test_gross_income_tests_in_corpus() -> None:
+    load_corpus.cache_clear()
+    doc = get_by_id("nc-fns-gross-income-tests")
+    assert doc is not None
+    assert "130%" in doc.text
+    assert doc.url and "morefood.org" in doc.url
 
 
 def test_get_by_id() -> None:

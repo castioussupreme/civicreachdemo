@@ -17,7 +17,13 @@ from src.limits import LONG_MESSAGE_HISTORY_PLACEHOLDER, MESSAGE_TOO_LONG_REPLY
 from src.planner.missing import PlanResult
 from src.process_turn import process_turn
 from src.retrieval.kb import Citation
-from src.state.models import Assessment, AssessmentStatus, EligibilityCase, fresh_case
+from src.state.models import (
+    Assessment,
+    AssessmentStatus,
+    EligibilityCase,
+    FieldStatus,
+    fresh_case,
+)
 
 get_settings.cache_clear()
 
@@ -174,6 +180,32 @@ def test_not_in_nc_assesses_ineligible(
     result = process_turn("I do not live in North Carolina", fresh_case(program_slug="nc-fns"))
     assert result.case.assessment is not None
     assert result.case.assessment.status == AssessmentStatus.LIKELY_INELIGIBLE
+
+
+def test_maybe_residency_gets_conversational_clarify(
+    stub_llm: Callable[[list[ExtractionResult]], None],
+) -> None:
+    """Regression: \"maybe\" must not re-paste the same yes/no residency question."""
+    stub_llm(
+        [
+            # Go-ahead / empty — start screening via yes path next
+            _extract({}),
+            _extract({}),  # "maybe" — no bool residency fact
+        ]
+    )
+    case = fresh_case(program_slug="ca-calfresh")
+    case.screening_started = True
+    case.last_missing_fields = ["lives_in_service_area"]
+    case.last_question = "Do you currently live in California?"
+    result = process_turn("maybe", case)
+    assert result.case.lives_in_service_area.status == FieldStatus.UNCERTAIN
+    assert result.debug.get("stopped") == "ambiguous_residency_clarify"
+    lower = result.reply.lower()
+    assert "california" in lower
+    # Must not be a robot re-ask of the exact prior question
+    assert result.reply.strip() != "Do you currently live in California?"
+    assert "main home" in lower or "most" in lower
+    assert "okay" in lower or "fuzzy" in lower or "no problem" in lower or "that's okay" in lower
 
 
 def test_ambiguous_income_needs_clarification(

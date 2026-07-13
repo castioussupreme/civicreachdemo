@@ -71,6 +71,23 @@ def test_coerce_flat_facts_object() -> None:
     assert result["user_intents"] == ["eligibility_screening"]
 
 
+def test_coerce_rejects_ambiguous_bool_strings() -> None:
+    """bool("maybe") is True in Python — we must not treat that as residency."""
+    result = coerce_extraction(
+        {
+            "facts": {
+                "lives_in_service_area": "maybe",
+                "is_student": "false",  # clear string → False
+                "elderly_or_disabled_member": "nope",
+            }
+        }
+    )
+    facts = result["facts"]
+    assert "lives_in_service_area" not in facts
+    assert facts.get("is_student") is False
+    assert "elderly_or_disabled_member" not in facts
+
+
 def test_coerce_rejects_bad_period_and_bool_as_int() -> None:
     result = coerce_extraction(
         {

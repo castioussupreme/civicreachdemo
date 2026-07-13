@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 from src.compose.copy import build_opening_message
 from src.programs.registry import get_program
-from src.session import SESSION_TTL_SECONDS, SessionNotFoundError, SessionStore, open_session_store
+from src.session import (
+    SESSION_TTL_SECONDS,
+    SessionCorruptError,
+    SessionNotFoundError,
+    SessionStore,
+    open_session_store,
+)
 from src.state.models import CaseField, FieldStatus, fresh_case
 
 
@@ -85,3 +92,23 @@ def test_set_uses_sliding_ttl() -> None:
         _args, kwargs = client.set.call_args
         assert kwargs.get("ex") == SESSION_TTL_SECONDS
         assert SESSION_TTL_SECONDS == 60 * 60 * 24
+
+
+def test_get_corrupt_json_raises_session_corrupt() -> None:
+    """Regression: invalid bool on residency used to 500 the chat endpoint."""
+    client = MagicMock()
+    # Minimal valid shell with corrupt residency value (as seen in Redis)
+    case = fresh_case(program_slug="nc-fns")
+    payload = case.model_dump()
+    payload["lives_in_service_area"] = {
+        "status": "known",
+        "value": "maybe",
+        "raw_value": "maybe",
+        "confidence": 0.5,
+        "source_turn": 1,
+    }
+    client.get.return_value = json.dumps(payload)
+    with patch("src.session.redis.Redis.from_url", return_value=client):
+        store = SessionStore("redis://localhost:6379/0")
+        with pytest.raises(SessionCorruptError):
+            store.get("sid-corrupt")

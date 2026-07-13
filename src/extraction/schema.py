@@ -109,7 +109,7 @@ def _coerce_safety(raw: object) -> dict[str, SafetySignal]:
         if not isinstance(item, dict):
             continue
         flag = bool(item.get("flag")) if item.get("flag") is not None else False
-        conf = _as_float(item.get("confidence"))
+        conf = as_float(item.get("confidence"))
         out[key] = {
             "flag": flag,
             "confidence": conf if conf is not None else 0.0,
@@ -127,19 +127,20 @@ def _coerce_facts(raw: object) -> ExtractionFacts:
     if isinstance(conf_raw, dict):
         for key, val in conf_raw.items():
             if isinstance(key, str):
-                parsed = _as_float(val)
+                parsed = as_float(val)
                 if parsed is not None:
                     confidence[key] = parsed
     facts["confidence"] = confidence
 
-    if raw.get("lives_in_service_area") is not None:
-        facts["lives_in_service_area"] = bool(raw["lives_in_service_area"])
+    lives = as_bool(raw.get("lives_in_service_area"))
+    if lives is not None:
+        facts["lives_in_service_area"] = lives
 
-    size = _as_int(raw.get("household_size"))
+    size = as_int(raw.get("household_size"))
     if size is not None:
         facts["household_size"] = size
 
-    amount = _as_float(raw.get("income_amount"))
+    amount = as_float(raw.get("income_amount"))
     if amount is not None:
         facts["income_amount"] = amount
 
@@ -162,10 +163,12 @@ def _coerce_facts(raw: object) -> ExtractionFacts:
     if isinstance(hoi, str) and hoi in {"household", "individual"}:
         facts["household_or_individual"] = cast(HouseholdOrIndividual, hoi)
 
-    if raw.get("is_student") is not None:
-        facts["is_student"] = bool(raw["is_student"])
-    if raw.get("elderly_or_disabled_member") is not None:
-        facts["elderly_or_disabled_member"] = bool(raw["elderly_or_disabled_member"])
+    student = as_bool(raw.get("is_student"))
+    if student is not None:
+        facts["is_student"] = student
+    elderly = as_bool(raw.get("elderly_or_disabled_member"))
+    if elderly is not None:
+        facts["elderly_or_disabled_member"] = elderly
 
     confirm_field = raw.get("confirm_field")
     if isinstance(confirm_field, str):
@@ -184,10 +187,39 @@ def _coerce_facts(raw: object) -> ExtractionFacts:
     if isinstance(inc_raw, str):
         facts["income_amount_raw"] = inc_raw
 
+    # Confidence map: drop keys for fields we could not coerce
+    conf = facts.get("confidence") or {}
+    for key in list(conf):
+        if key == "lives_in_service_area" and "lives_in_service_area" not in facts:
+            conf.pop(key, None)
+    facts["confidence"] = conf
+
     return facts
 
 
-def _as_int(value: object) -> int | None:
+def as_bool(value: object) -> bool | None:
+    """
+    Strict boolean coerce — never bool("maybe") / bool("false").
+
+    Accepts bool, 0/1 ints, and clear yes/no strings only.
+    """
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return None
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        low = value.strip().lower()
+        if low in {"true", "yes", "y", "1"}:
+            return True
+        if low in {"false", "no", "n", "0"}:
+            return False
+        return None
+    return None
+
+
+def as_int(value: object) -> int | None:
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, int):
@@ -202,7 +234,7 @@ def _as_int(value: object) -> int | None:
     return None
 
 
-def _as_float(value: object) -> float | None:
+def as_float(value: object) -> float | None:
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, int | float):

@@ -31,7 +31,12 @@ from src.programs.registry import (
 )
 from src.retrieval.index import ensure_index, format_sync_summary
 from src.retrieval.kb import public_citation_dicts
-from src.session import SessionNotFoundError, SessionStoreProtocol, open_session_store
+from src.session import (
+    SessionCorruptError,
+    SessionNotFoundError,
+    SessionStoreProtocol,
+    open_session_store,
+)
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -268,6 +273,14 @@ def chat(
             status_code=404,
             detail="session not found or expired; create a session with program_slug first",
         ) from None
+    except SessionCorruptError:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "session data is invalid; start a new session or reset "
+                "(/api/session/{id}/reset) and try again"
+            ),
+        ) from None
     session_id = body.session_id
     program_slug = case.program_slug
     try:
@@ -285,7 +298,13 @@ def chat(
                 "session_id": session_id,
             },
         )
-    sessions.set(session_id, result.case)
+    try:
+        sessions.set(session_id, result.case)
+    except SessionCorruptError:
+        raise HTTPException(
+            status_code=500,
+            detail="could not save session state; please reset and try again",
+        ) from None
 
     assessment_status = result.assessment.status.value if result.assessment is not None else None
     assessment_payload: dict[str, object] | None = None
@@ -328,6 +347,11 @@ def session_state(request: Request, session_id: str) -> StateResponse:
         case = _get_store(request).get(session_id)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="session not found or expired") from None
+    except SessionCorruptError:
+        raise HTTPException(
+            status_code=409,
+            detail="session data is invalid; reset or create a new session",
+        ) from None
     assessment_payload: dict[str, object] | None = None
     source_ids: list[str] = []
     if case.assessment is not None:

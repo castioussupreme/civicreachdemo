@@ -456,7 +456,10 @@ def _compose_intake(
         + mode
         + ":\n"
         + (
-            "- Ask exactly ONE natural question (use next_question_hint as the idea, rephrase freely).\n"
+            "- Ask exactly ONE natural question (use next_question_hint as the *idea*, rephrase freely).\n"
+            "- NEVER paste next_question_hint word-for-word if the user just answered (even vaguely).\n"
+            "- If user_just_said is fuzzy (maybe, not sure, it depends): acknowledge that first, "
+            "briefly explain why a simple yes/no helps this screen, then ask a clearer version.\n"
             "- Do not recap every known fact. Do not say you still need more information as a status.\n"
             if mode in {"collect_info", "ask_follow_up"}
             else "- Answer using policy_context only, briefly, then continue intake if needed.\n"
@@ -480,6 +483,7 @@ def _compose_intake(
             "conversation_history": history,
             "known_facts": case.known_summary(),
             "next_question_hint": plan.next_question_hint or None,
+            "field_status_hint": _field_status_hint(case, plan),
             "screening_result": screening_payload,
             "citations": (
                 _public_citation_payload(citations, program_slug=case.program_slug)
@@ -494,3 +498,22 @@ def _compose_intake(
         default=str,
     )
     return chat_text(system=system, user=user, temperature=0.45)
+
+
+def _field_status_hint(case: EligibilityCase, plan: PlanResult) -> str | None:
+    """Tell compose when the primary missing slot is uncertain / needs soft clarify."""
+    if not plan.missing_fields:
+        return None
+    primary = plan.missing_fields[0]
+    if primary.startswith("confirm_conflict"):
+        return "conflict_confirm"
+    field = getattr(case, primary, None)
+    if field is None:
+        return None
+    status = getattr(field, "status", None)
+    if status is None:
+        return None
+    status_val = status.value if hasattr(status, "value") else str(status)
+    if status_val == "uncertain":
+        return f"{primary}_uncertain"
+    return None

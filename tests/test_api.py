@@ -12,6 +12,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key-not-used")
 from fastapi.testclient import TestClient
 from src.api.app import app
 from src.process_turn import TurnResult
+from src.session import SessionCorruptError
 from src.state.models import (
     Assessment,
     AssessmentStatus,
@@ -126,6 +127,26 @@ def test_chat_requires_session_id() -> None:
     with TestClient(app) as client:
         chat = client.post("/api/chat", json={"message": "hello"})
         assert chat.status_code == 400
+
+
+@pytest.mark.usefixtures("fake_session_store")
+def test_chat_corrupt_session_returns_409_not_500(fake_session_store: object) -> None:
+    """Regression: corrupt Redis case JSON must not 500 the ASGI app."""
+    store = fake_session_store
+
+    def _boom(_sid: str) -> None:
+        raise SessionCorruptError(_sid)
+
+    with (
+        patch.object(store, "get", side_effect=_boom),
+        TestClient(app) as client,
+    ):
+        chat = client.post(
+            "/api/chat",
+            json={"session_id": "any", "message": "hello"},
+        )
+        assert chat.status_code == 409
+        assert "invalid" in chat.json()["detail"].lower()
 
 
 @pytest.mark.usefixtures("fake_session_store")

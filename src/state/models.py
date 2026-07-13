@@ -4,7 +4,7 @@ from datetime import date
 from enum import StrEnum
 from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.compose.copy import build_opening_message
 from src.json_types import JsonObject, JsonValue
@@ -40,6 +40,10 @@ class AssessmentStatus(StrEnum):
 
 
 class CaseField(BaseModel, Generic[T]):
+    """Typed slot. validate_assignment blocks corrupt values before Redis write."""
+
+    model_config = ConfigDict(validate_assignment=True)
+
     status: FieldStatus = FieldStatus.UNKNOWN
     value: T | None = None
     raw_value: str | None = None
@@ -149,6 +153,8 @@ def fresh_case(
 
 
 class EligibilityCase(BaseModel):
+    model_config = ConfigDict(validate_assignment=True)
+
     stage: Stage = Stage.INTRODUCTION
     turn_count: int = 0
     last_question: str | None = None

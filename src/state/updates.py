@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TypeVar
 
 from src.eligibility.income import normalize_to_monthly
-from src.extraction.schema import ExtractionFacts, ExtractionResult
+from src.extraction.schema import ExtractionFacts, ExtractionResult, as_bool, as_float, as_int
 from src.state.models import (
     CaseField,
     Contradiction,
@@ -16,6 +16,19 @@ from src.state.models import (
 )
 
 T = TypeVar("T")
+
+_BOOL_FIELDS = frozenset(
+    {
+        "lives_in_service_area",
+        "is_student",
+        "elderly_or_disabled_member",
+    }
+)
+_INT_FIELDS = frozenset({"household_size"})
+_FLOAT_FIELDS = frozenset({"income_amount", "normalized_gross_monthly"})
+_PERIOD_FIELDS = frozenset({"income_period"})
+_GROSS_NET_FIELDS = frozenset({"gross_or_net"})
+_HOI_FIELDS = frozenset({"household_or_individual"})
 
 
 def _set_field(
@@ -90,16 +103,18 @@ def apply_validated_updates(
 
     lives_in_service_area = facts.get("lives_in_service_area")
     if lives_in_service_area is not None:
-        lives = bool(lives_in_service_area)
-        _set_field(
-            case.lives_in_service_area,
-            lives,
-            raw=str(facts.get("lives_in_service_area_raw") or lives),
-            confidence=_conf(facts, "lives_in_service_area"),
-            turn=turn,
-            path="lives_in_service_area",
-            case=case,
-        )
+        # Already strict-bool from coerce; re-check before write
+        lives = as_bool(lives_in_service_area)
+        if lives is not None:
+            _set_field(
+                case.lives_in_service_area,
+                lives,
+                raw=str(facts.get("lives_in_service_area_raw") or lives),
+                confidence=_conf(facts, "lives_in_service_area"),
+                turn=turn,
+                path="lives_in_service_area",
+                case=case,
+            )
 
     household_size = facts.get("household_size")
     if household_size is not None:
@@ -181,31 +196,33 @@ def apply_validated_updates(
 
     is_student = facts.get("is_student")
     if is_student is not None:
-        student = bool(is_student)
-        _set_field(
-            case.is_student,
-            student,
-            raw=str(student),
-            confidence=_conf(facts, "is_student"),
-            turn=turn,
-            path="is_student",
-            case=case,
-        )
+        student = as_bool(is_student)
+        if student is not None:
+            _set_field(
+                case.is_student,
+                student,
+                raw=str(student),
+                confidence=_conf(facts, "is_student"),
+                turn=turn,
+                path="is_student",
+                case=case,
+            )
 
     elderly = facts.get("elderly_or_disabled_member")
     if elderly is not None:
-        flag = bool(elderly)
-        _set_field(
-            case.elderly_or_disabled_member,
-            flag,
-            raw=str(flag),
-            confidence=_conf(facts, "elderly_or_disabled_member"),
-            turn=turn,
-            path="elderly_or_disabled_member",
-            case=case,
-        )
+        flag = as_bool(elderly)
+        if flag is not None:
+            _set_field(
+                case.elderly_or_disabled_member,
+                flag,
+                raw=str(flag),
+                confidence=_conf(facts, "elderly_or_disabled_member"),
+                turn=turn,
+                path="elderly_or_disabled_member",
+                case=case,
+            )
 
-    # Confirmation of a conflicting field
+    # Confirmation of a conflicting field (typed — never raw LLM strings on bool slots)
     confirm_field = facts.get("confirm_field")
     confirm_value = facts.get("confirm_value")
     if confirm_field and confirm_value is not None:
@@ -225,6 +242,39 @@ def _conf(facts: ExtractionFacts, key: str) -> float | None:
     return 0.8
 
 
+def _coerce_confirm_value(path: str, value: ScalarValue) -> ScalarValue | None:
+    """Map confirm_value onto the field's real type; None = drop (do not write)."""
+    if path in _BOOL_FIELDS:
+        return as_bool(value)
+    if path in _INT_FIELDS:
+        return as_int(value)
+    if path in _FLOAT_FIELDS:
+        return as_float(value)
+    if path in _PERIOD_FIELDS:
+        if isinstance(value, str) and value in {
+            "daily",
+            "weekly",
+            "biweekly",
+            "semimonthly",
+            "monthly",
+            "annual",
+        }:
+            return value
+        return None
+    if path in _GROSS_NET_FIELDS:
+        if isinstance(value, str) and value in {"gross", "net"}:
+            return value
+        return None
+    if path in _HOI_FIELDS:
+        if isinstance(value, str) and value in {"household", "individual"}:
+            return value
+        return None
+    # Unknown path — only pass through already-scalar typed values
+    if isinstance(value, bool | int | float | str):
+        return value
+    return None
+
+
 def _resolve_conflict(
     case: EligibilityCase,
     path: str,
@@ -234,8 +284,13 @@ def _resolve_conflict(
     field = getattr(case, path, None)
     if not isinstance(field, CaseField):
         return
+    coerced = _coerce_confirm_value(path, value)
+    if coerced is None:
+        case.notes.append(f"Turn {turn}: ignored untyped confirm for {path}: {value!r}")
+        return
+    # Path-specific coerce already typed the value for this field
     field.status = FieldStatus.KNOWN
-    field.value = value
+    field.value = coerced
     field.source_turn = turn
     for c in case.contradictions:
         if c.field == path and not c.resolved:

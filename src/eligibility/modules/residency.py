@@ -44,7 +44,10 @@ class ResidencyModule:
             return [
                 MissingItem(
                     field_key="lives_in_service_area",
-                    question_hint=f"Just to confirm — do you currently live in {area}?",
+                    question_hint=(
+                        f"No problem if it's complicated — for this screen, is your main home "
+                        f"right now in {area}? (Yes or no is enough; use where you live most weeks.)"
+                    ),
                 )
             ]
         return []

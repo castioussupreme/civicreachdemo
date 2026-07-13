@@ -38,6 +38,18 @@ def test_starts_with_residency() -> None:
     assert plan.stage == Stage.INTRODUCTION
 
 
+def test_uncertain_residency_uses_softer_hint() -> None:
+    case = _case(
+        lives_in_service_area=CaseField(status=FieldStatus.UNCERTAIN, value=None),
+        turn_count=2,
+    )
+    plan = determine_missing_fields(case)
+    assert plan.missing_fields[0] == "lives_in_service_area"
+    assert plan.stage == Stage.CLARIFYING
+    assert "main home" in plan.next_question_hint.lower()
+    assert plan.next_question_hint != "Do you currently live in North Carolina?"
+
+
 def test_not_in_nc_ready_to_assess() -> None:
     case = _case(lives_in_service_area=CaseField(status=FieldStatus.KNOWN, value=False))
     plan = determine_missing_fields(case)

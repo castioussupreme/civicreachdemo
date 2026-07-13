@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
 from src.state.models import CaseField, EligibilityCase, FieldStatus
 from src.state.updates import apply_validated_updates
 
@@ -321,3 +323,39 @@ def test_case_field_is_usable() -> None:
     assert known.is_usable() is True
     uncertain = CaseField(status=FieldStatus.UNCERTAIN, value=3)
     assert uncertain.is_usable() is False
+
+
+def test_confirm_value_maybe_does_not_corrupt_bool_field() -> None:
+    """Regression: confirm_value 'maybe' was written onto lives_in_service_area."""
+    case = EligibilityCase(
+        lives_in_service_area=CaseField(status=FieldStatus.CONFLICTING, value=True),
+    )
+    case = apply_validated_updates(
+        case,
+        {
+            "facts": {
+                "confirm_field": "lives_in_service_area",
+                "confirm_value": "maybe",
+            }
+        },
+        turn=2,
+    )
+    # Prior value kept; corrupt string never assigned
+    assert case.lives_in_service_area.value is True
+    assert case.lives_in_service_area.value is not False
+    assert isinstance(case.lives_in_service_area.value, bool)
+    assert any("ignored untyped confirm" in n for n in case.notes)
+
+
+def test_case_round_trip_rejects_corrupt_residency_json() -> None:
+    """EligibilityCase load rejects non-bool residency (the Redis get path)."""
+    case = EligibilityCase(
+        program_slug="nc-fns",
+        ruleset_id="x",
+        as_of="2026-01-01",
+        lives_in_service_area=CaseField(status=FieldStatus.KNOWN, value=True),
+    )
+    payload = case.model_dump()
+    payload["lives_in_service_area"]["value"] = "maybe"
+    with pytest.raises(ValidationError):
+        EligibilityCase.model_validate(payload)

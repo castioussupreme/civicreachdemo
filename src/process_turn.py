@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+from contextlib import suppress
 from dataclasses import dataclass, field
 
 from src.compose.response import compose_response, is_terminal_assessment
@@ -25,7 +26,8 @@ from src.safety.checks import (
     redact_pii,
     resolve_safety,
 )
-from src.state.models import Assessment, EligibilityCase, Stage
+from src.state.clarify import clarify_residency_reply, is_ambiguous_yes_no
+from src.state.models import Assessment, EligibilityCase, FieldStatus, Stage
 from src.state.updates import apply_validated_updates
 
 logger = logging.getLogger(__name__)
@@ -213,6 +215,10 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
     # 3) Apply extracted screening facts (after safety gate)
     case = apply_validated_updates(case, extraction, turn=case.turn_count)
 
+    # Soft yes/no hedges ("maybe") never become bools — mark UNCERTAIN so we clarify
+    # instead of re-asking the same robotic question.
+    _mark_ambiguous_residency(case, working_message)
+
     # Opening already covered scope; wait for go-ahead before intake questions
     if not case.screening_started and _user_ready_to_screen(working_message, extraction):
         case.screening_started = True
@@ -226,6 +232,37 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
         case.asked_for_gross_amount = True
     if "approx_household_total" in plan.missing_fields:
         case.asked_for_household_total = True
+
+    # Ambiguous residency: code-owned conversational clarify (LLM often re-pastes the hint)
+    if (
+        safety.action not in _STEER_ACTIONS
+        and safety.action != SafetyAction.REFUSE_APPLICATION
+        and case.lives_in_service_area.status == FieldStatus.UNCERTAIN
+        and plan.missing_fields[:1] == ["lives_in_service_area"]
+        and is_ambiguous_yes_no(working_message)
+    ):
+        area = "the program service area"
+        with suppress(Exception):
+            area = get_program(case.program_slug).service_area_name or area
+        reply = clarify_residency_reply(area)
+        if safety_preamble:
+            reply = f"{safety_preamble.strip()} {reply}".strip()
+        case.append_turn("assistant", reply, max_chars=max_chars)
+        debug = build_turn_debug(
+            case,
+            safety_action=safety.action.value,
+            safety_source=safety.source,
+            extraction=_extraction_json(extraction),
+            plan=plan,
+            stopped="ambiguous_residency_clarify",
+        )
+        _log_turn(debug)
+        return TurnResult(
+            reply=reply,
+            case=case,
+            safety_action=safety.action.value,
+            debug=debug,
+        )
 
     # Pure detour: code-owned refuse + next screening question
     if safety.action in _STEER_ACTIONS and not _extraction_has_screening_facts(extraction):
@@ -388,6 +425,39 @@ def _user_ready_to_screen(message: str, extraction: ExtractionResult) -> bool:
     if _extraction_has_screening_facts(extraction):
         return True
     return bool(_GO_AHEAD_RE.match(message.strip()))
+
+
+def _mark_ambiguous_residency(case: EligibilityCase, message: str) -> None:
+    """
+    When we asked (or still need) residency and the user hedges, mark UNCERTAIN.
+
+    Strict bool coerce drops \"maybe\"; without this the planner re-asks the same
+    UNKNOWN question forever.
+    """
+    if case.lives_in_service_area.status not in (
+        FieldStatus.UNKNOWN,
+        FieldStatus.UNCERTAIN,
+    ):
+        return
+    if case.lives_in_service_area.is_usable():
+        return
+    if not is_ambiguous_yes_no(message):
+        return
+    # Only when residency is in play (asked last turn, or already screening)
+    asked = "lives_in_service_area" in (case.last_missing_fields or [])
+    if not asked and not case.screening_started:
+        return
+    if not asked and case.screening_started:
+        # Still early intake and residency not confirmed — treat hedge as about residency
+        # only if last_question looked like a residency ask
+        lq = (case.last_question or "").lower()
+        if "live" not in lq and "resident" not in lq:
+            return
+    case.lives_in_service_area.status = FieldStatus.UNCERTAIN
+    case.lives_in_service_area.value = None
+    case.lives_in_service_area.raw_value = message.strip()
+    case.lives_in_service_area.confidence = 0.3
+    case.lives_in_service_area.source_turn = case.turn_count
 
 
 def _openai_failure_turn(

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Protocol
 
 import redis
+from pydantic import ValidationError
 
 from src.state.models import EligibilityCase, fresh_case
+
+logger = logging.getLogger(__name__)
 
 # Whole case (slots + transcript + assessment) lives under one Redis key.
 # Sliding TTL: every write refreshes expiry. Idle sessions vanish entirely.
@@ -16,6 +20,10 @@ SESSION_TTL_SECONDS = 60 * 60 * 24  # 24 hours
 
 class SessionNotFoundError(KeyError):
     """Session id missing or expired — client must create a session with a program."""
+
+
+class SessionCorruptError(ValueError):
+    """Stored case JSON failed validation — client should reset or start a new session."""
 
 
 class SessionStoreProtocol(Protocol):
@@ -69,12 +77,23 @@ class SessionStore:
         raw = self._client.get(self._prefix + session_id)
         if raw is None:
             raise SessionNotFoundError(session_id)
-        return EligibilityCase.model_validate_json(raw)
+        try:
+            return EligibilityCase.model_validate_json(raw)
+        except ValidationError as exc:
+            logger.error("corrupt session %s: %s", session_id, exc)
+            raise SessionCorruptError(session_id) from exc
 
     def set(self, session_id: str, case: EligibilityCase) -> None:
+        # Re-validate before write so invalid in-memory values never hit Redis
+        payload = case.model_dump_json()
+        try:
+            EligibilityCase.model_validate_json(payload)
+        except ValidationError as exc:
+            logger.error("refusing to persist invalid case for %s: %s", session_id, exc)
+            raise SessionCorruptError(session_id) from exc
         self._client.set(
             self._prefix + session_id,
-            case.model_dump_json(),
+            payload,
             ex=self._ttl_seconds,
         )
 

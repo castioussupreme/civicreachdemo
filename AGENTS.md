@@ -22,10 +22,13 @@ For **nc-fns**, eligibility **math** is `programs/nc-fns/rules/*.yaml`; the **pu
 
 | Role                                | Path                                                                |
 | ----------------------------------- | ------------------------------------------------------------------- |
-| Rules (authoritative for assessment) | `programs/nc-fns/rules/2025-10.yaml` (and future FY files)          |
-| Knowledge (RAG / display table)     | `programs/nc-fns/knowledge/nc-fns-income-limits.md`                 |
-| Manifest metadata                   | `programs/nc-fns/knowledge/manifest.json` entry `nc-fns-income-limits` |
-| Soft CI guard                       | `tests/test_knowledge.py` (`test_income_doc_matches_ruleset_table`) |
+| Rules (authoritative for assessment) | `programs/nc-fns/rules/*.yaml` (one file per FY version)            |
+| Knowledge (RAG / display table)     | Matching `nc-fns-income-limits*.md` dual-copied per ruleset         |
+| Manifest metadata                   | `programs/nc-fns/knowledge/manifest.json` (per-source effective dates) |
+| Soft CI guard                       | `tests/test_knowledge.py` (each ruleset ↔ its income doc)           |
+
+**Multi-version:** resolve by `as_of` (latest `effective_from` wins); **pin** `ruleset_id` on session create.
+Retrieve filters knowledge docs by `as_of` within the program silo so the wrong FY table is not cited.
 
 **Public provenance (both copies must stay aligned with this source):**
 

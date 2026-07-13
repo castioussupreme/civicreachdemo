@@ -20,12 +20,14 @@ def retrieve(
     program_slug: str | None = None,
     source_ids: list[str] | None = None,
     limit: int = 3,
+    as_of: str | None = None,
 ) -> list[Citation]:
     """
     Semantic search over one program silo only (mandatory program_slug pre-filter).
 
     When source_ids is set (assessment grounding), prefer those sources first
-    still within the same program_slug.
+    still within the same program_slug. as_of (ISO date) drops docs outside
+    their effective window.
     """
     slug = (program_slug or "").strip() or default_program_slug()
     ensure_index()
@@ -36,7 +38,13 @@ def retrieve(
     settings = get_settings()
     top_k = limit if limit > 0 else settings.retrieval_top_k
     q = query.strip() or "eligibility income household"
-    return _vector_retrieve(q, program_slug=slug, source_ids=source_ids, limit=top_k)
+    return _vector_retrieve(
+        q,
+        program_slug=slug,
+        source_ids=source_ids,
+        limit=top_k,
+        as_of=as_of,
+    )
 
 
 def _vector_retrieve(
@@ -45,6 +53,7 @@ def _vector_retrieve(
     program_slug: str,
     source_ids: list[str] | None,
     limit: int,
+    as_of: str | None,
 ) -> list[Citation]:
     settings = get_settings()
     try:
@@ -65,6 +74,7 @@ def _vector_retrieve(
                 program_slug=program_slug,
                 limit=limit,
                 source_ids=source_ids,
+                as_of=as_of,
             )
             hits.extend(preferred)
             # Fill remaining only within the same program (never unfiltered)
@@ -75,6 +85,7 @@ def _vector_retrieve(
                     program_slug=program_slug,
                     limit=limit * 2,
                     source_ids=None,
+                    as_of=as_of,
                 )
                 seen = {h.source_id for h in hits}
                 for h in rest:
@@ -91,6 +102,7 @@ def _vector_retrieve(
                 program_slug=program_slug,
                 limit=limit * 2,
                 source_ids=None,
+                as_of=as_of,
             )
     except Exception:
         logger.exception("Qdrant search failed")
@@ -136,10 +148,12 @@ def retrieve_supporting_policy(
     user_query: str = "",
     limit: int = 3,
     program_slug: str | None = None,
+    as_of: str | None = None,
 ) -> list[Citation]:
     return retrieve(
         user_query or "eligibility income household",
         program_slug=program_slug,
         source_ids=assessment_source_ids,
         limit=limit,
+        as_of=as_of,
     )

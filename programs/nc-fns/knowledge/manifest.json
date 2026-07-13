@@ -23,14 +23,24 @@
       "notes": "Public screening table labeled Maximum Gross Monthly Income (200%). Some households may face a 130% test determined by DSS."
     },
     {
+      "id": "nc-fns-income-limits-2026",
+      "title": "NC SNAP/FNS gross monthly income limits (FY 2027 / 2026-10 ruleset)",
+      "file": "nc-fns-income-limits-2026.md",
+      "url": "https://morefood.org/using-snap/am-i-eligible/",
+      "publisher": "More In My Basket (NC State / USDA-funded outreach)",
+      "effective_from": "2026-10-01",
+      "effective_to": null,
+      "notes": "Illustrative next-FY 200% table for multi-version / rollover testing. Dual-copied with rules/2026-10.yaml."
+    },
+    {
       "id": "nc-fns-gross-income-tests",
       "title": "Gross income tests (200% screening table vs 130%)",
       "file": "nc-fns-gross-income-tests.md",
       "url": "https://morefood.org/using-snap/am-i-eligible/",
       "publisher": "More In My Basket (NC State / USDA-funded outreach)",
-      "effective_from": "2025-10-01",
-      "effective_to": "2026-09-30",
-      "notes": "Explains 200% vs ~130% gross tests for RAG. POC math uses only the 200% table; DSS chooses which test applies."
+      "effective_from": null,
+      "effective_to": null,
+      "notes": "Explains 200% vs ~130% gross tests for RAG. POC math uses only the 200% table; DSS chooses which test applies. Timeless concept note."
     },
     {
       "id": "nc-fns-general-requirements",
@@ -38,8 +48,8 @@
       "file": "nc-fns-general-requirements.md",
       "url": "https://morefood.org/using-snap/am-i-eligible/",
       "publisher": "More In My Basket",
-      "effective_from": "2025-10-01",
-      "effective_to": "2026-09-30",
+      "effective_from": null,
+      "effective_to": null,
       "notes": "Simplified general requirements for screening only."
     },
     {

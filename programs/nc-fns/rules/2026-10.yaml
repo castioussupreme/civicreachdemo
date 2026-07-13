@@ -1,0 +1,19 @@
+# Dual copy with programs/nc-fns/knowledge/nc-fns-income-limits-2026.md — see AGENTS.md
+# Synthetic next-FY table for multi-version resolution (POC). Replace with real COLA figures when published.
+id: nc-fns-screening-2026-10
+effective_from: "2026-10-01"
+effective_to: null
+source_id: nc-fns-income-limits-2026
+description: >-
+  Simplified NC FNS gross monthly income screen using the public 200% table (FY 2027 window).
+  Open-ended until the next ruleset file is published. Not an official determination.
+max_gross_monthly_by_size:
+  1: 2700.0
+  2: 3600.0
+  3: 4500.0
+  4: 5400.0
+  5: 6300.0
+  6: 7200.0
+  7: 8100.0
+  8: 9000.0
+additional_member_increment: 900.0

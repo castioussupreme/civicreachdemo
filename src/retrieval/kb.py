@@ -214,10 +214,17 @@ def retrieve(
     source_ids: list[str] | None = None,
     limit: int = 3,
     program_slug: str = "",
+    as_of: str | None = None,
 ) -> list[Citation]:
     from src.retrieval.retrieve import retrieve as _vector_retrieve  # noqa: PLC0415
 
-    return _vector_retrieve(query, source_ids=source_ids, limit=limit, program_slug=program_slug)
+    return _vector_retrieve(
+        query,
+        source_ids=source_ids,
+        limit=limit,
+        program_slug=program_slug,
+        as_of=as_of,
+    )
 
 
 def retrieve_supporting_policy(
@@ -226,6 +233,7 @@ def retrieve_supporting_policy(
     user_query: str = "",
     limit: int = 3,
     program_slug: str = "",
+    as_of: str | None = None,
 ) -> list[Citation]:
     from src.retrieval.retrieve import (  # noqa: PLC0415
         retrieve_supporting_policy as _vector_support,
@@ -236,6 +244,7 @@ def retrieve_supporting_policy(
         user_query=user_query,
         limit=limit,
         program_slug=program_slug,
+        as_of=as_of,
     )
 
 

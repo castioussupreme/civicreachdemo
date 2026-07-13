@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from src.eligibility.ruleset import RULESET
+from src.programs.registry import load_all_rulesets
 
 ROOT = Path(__file__).resolve().parents[1]
 KNOWLEDGE = ROOT / "programs" / "nc-fns" / "knowledge"
@@ -38,21 +39,24 @@ def test_gross_income_tests_doc_explains_200_vs_130() -> None:
 
 def test_income_doc_matches_ruleset_table() -> None:
     """
-    Spot-check: RULESET amounts appear in knowledge/nc-fns-income-limits.md.
+    Spot-check: each ruleset version's amounts appear in its dual-copy knowledge doc.
 
-    Dual copy is intentional (math in code, table for RAG). Agents must update
+    Dual copy is intentional (math in YAML, table for RAG). Agents must update
     both — see AGENTS.md. This is a soft guard, not a full table parser.
     """
-    text = (KNOWLEDGE / "nc-fns-income-limits.md").read_text(encoding="utf-8")
-    assert RULESET.effective_from in text or "2025-10-01" in text or "October 1, 2025" in text
-    for size, amount in RULESET.max_gross_monthly_by_size.items():
-        # Doc uses $2,610 style for small sizes
-        pretty = f"${amount:,.0f}" if amount == int(amount) else f"${amount}"
-        alt = f"$ {amount:,.0f}" if amount == int(amount) else None
-        assert (
-            pretty in text
-            or pretty.replace(",", "") in text
-            or (alt is not None and alt in text)
-            or str(int(amount)) in text
-        ), f"threshold for size {size} ({amount}) not found in income doc"
-    assert str(int(RULESET.additional_member_increment)) in text
+    for rs in load_all_rulesets("nc-fns"):
+        # source_id maps to knowledge file stem or known dual-copy file
+        if rs.source_id == "nc-fns-income-limits":
+            path = KNOWLEDGE / "nc-fns-income-limits.md"
+        elif rs.source_id == "nc-fns-income-limits-2026":
+            path = KNOWLEDGE / "nc-fns-income-limits-2026.md"
+        else:
+            continue
+        text = path.read_text(encoding="utf-8")
+        assert rs.id in text or rs.effective_from in text
+        for size, amount in rs.max_gross_monthly_by_size.items():
+            pretty = f"${amount:,.0f}" if float(amount) == int(amount) else f"${amount}"
+            assert pretty in text or pretty.replace(",", "") in text or str(int(amount)) in text, (
+                f"{rs.id}: threshold for size {size} ({amount}) not found in {path.name}"
+            )
+        assert str(int(rs.additional_member_increment)) in text

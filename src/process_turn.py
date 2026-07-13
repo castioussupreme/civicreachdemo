@@ -156,10 +156,11 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
     policy_context = None
 
     program_slug = case.program_slug or "nc-fns"
+    as_of = case.as_of or None
     intents = extraction.get("user_intents") or []
     if "policy_question" in intents or extraction.get("policy_question"):
         q = extraction.get("policy_question") or working_message
-        citations = retrieve(q, limit=2, program_slug=program_slug)
+        citations = retrieve(q, limit=2, program_slug=program_slug, as_of=as_of)
         if citations:
             doc = get_by_id(citations[0].source_id, program_slug=program_slug)
             # Plain context for compose — no markdown report framing
@@ -178,6 +179,7 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
             user_query=working_message,
             limit=3,
             program_slug=program_slug,
+            as_of=as_of,
         )
 
     try:

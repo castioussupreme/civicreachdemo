@@ -209,7 +209,7 @@ programs/
 AGENTS.md           coding-agent rules (program packs + dual-copy)
 ```
 
-Ruleset `nc-fns-screening-2025-10` — FY table in `programs/nc-fns/rules/2025-10.yaml` dual-copied with `programs/nc-fns/knowledge/nc-fns-income-limits.md`.
+Rulesets: `programs/nc-fns/rules/2025-10.yaml` and `2026-10.yaml` (multi-version; resolve by `as_of`, pin on session create). Dual-copy tables in `programs/nc-fns/knowledge/nc-fns-income-limits*.md`. Retrieve filters docs by effective window so the wrong FY table is not cited.
 
 ---
 

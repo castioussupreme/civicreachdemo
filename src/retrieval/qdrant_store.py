@@ -196,6 +196,22 @@ def upsert_chunks(
         client.upsert(collection_name=COLLECTION, points=points)
 
 
+def doc_covers_as_of(
+    *,
+    effective_from: str | None,
+    effective_to: str | None,
+    as_of: str,
+) -> bool:
+    """
+    True if a knowledge doc is valid on as_of (ISO YYYY-MM-DD).
+
+    null effective_from / effective_to = open on that side (timeless or open-ended).
+    """
+    if effective_from and as_of < effective_from:
+        return False
+    return not (effective_to and as_of > effective_to)
+
+
 def search(
     client: QdrantClient,
     vector: list[float],
@@ -203,11 +219,13 @@ def search(
     program_slug: str,
     limit: int = 3,
     source_ids: list[str] | None = None,
+    as_of: str | None = None,
 ) -> list[StoredChunk]:
     """
     Vector search with mandatory program_slug pre-filter (not post-filter).
 
-    Never searches across programs.
+    Never searches across programs. Optional as_of drops docs outside their
+    effective window (within the program silo; over-fetch then date-filter).
     """
     if not program_slug:
         raise ValueError("program_slug is required for search (pre-filter isolation)")
@@ -222,16 +240,30 @@ def search(
             )
         )
     query_filter = qm.Filter(must=must)
+    # Over-fetch when date-filtering so top-k after as_of still has room
+    fetch_limit = limit * 4 if as_of else limit
     result = client.query_points(
         collection_name=COLLECTION,
         query=vector,
         query_filter=query_filter,
-        limit=limit,
+        limit=fetch_limit,
         with_payload=True,
     )
     out: list[StoredChunk] = []
     for h in result.points:
         payload = h.payload or {}
+        eff_from = (
+            payload.get("effective_from")
+            if isinstance(payload.get("effective_from"), str)
+            else None
+        )
+        eff_to = (
+            payload.get("effective_to") if isinstance(payload.get("effective_to"), str) else None
+        )
+        if as_of and not doc_covers_as_of(
+            effective_from=eff_from, effective_to=eff_to, as_of=as_of
+        ):
+            continue
         out.append(
             StoredChunk(
                 source_id=str(payload.get("source_id", "")),
@@ -242,16 +274,10 @@ def search(
                 chunk_index=int(payload.get("chunk_index") or 0),
                 score=float(h.score or 0.0),
                 program_slug=str(payload.get("program_slug") or program_slug),
-                effective_from=(
-                    payload.get("effective_from")
-                    if isinstance(payload.get("effective_from"), str)
-                    else None
-                ),
-                effective_to=(
-                    payload.get("effective_to")
-                    if isinstance(payload.get("effective_to"), str)
-                    else None
-                ),
+                effective_from=eff_from,
+                effective_to=eff_to,
             )
         )
+        if len(out) >= limit:
+            break
     return out

@@ -132,6 +132,10 @@ class ProgramMeta:
     root: Path
     service_area_name: str = ""
     service_area_short: str = ""
+    # Official apply pointers (public URLs only — agent never submits)
+    apply_url: str = ""
+    apply_label: str = ""
+    apply_channel: str = ""  # e.g. "your county DSS"
 
     @property
     def knowledge_dir(self) -> Path:

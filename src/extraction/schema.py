@@ -15,6 +15,20 @@ UserIntent = Literal[
 
 ConfirmableValue = bool | int | float | str
 
+SafetySignalKey = Literal[
+    "crisis",
+    "prompt_injection",
+    "request_apply_for_me",
+    "out_of_scope",
+    "off_topic",
+    "pii",
+]
+
+
+class SafetySignal(TypedDict, total=False):
+    flag: bool
+    confidence: float
+
 
 class ExtractionFacts(TypedDict, total=False):
     lives_in_nc: bool | None
@@ -38,16 +52,33 @@ class ExtractionResult(TypedDict, total=False):
     user_intents: list[str]
     policy_question: str | None
     notes: str | None
+    # LLM-primary safety signals; code applies thresholds + regex fallback
+    safety: dict[str, SafetySignal]
 
 
 def empty_facts() -> ExtractionFacts:
     return {"confidence": {}}
 
 
+def empty_safety() -> dict[str, SafetySignal]:
+    return {
+        "crisis": {"flag": False, "confidence": 0.0},
+        "prompt_injection": {"flag": False, "confidence": 0.0},
+        "request_apply_for_me": {"flag": False, "confidence": 0.0},
+        "out_of_scope": {"flag": False, "confidence": 0.0},
+        "off_topic": {"flag": False, "confidence": 0.0},
+        "pii": {"flag": False, "confidence": 0.0},
+    }
+
+
 def coerce_extraction(data: object) -> ExtractionResult:
     """Best-effort normalize LLM JSON into ExtractionResult."""
     if not isinstance(data, dict):
-        return {"facts": empty_facts(), "user_intents": ["eligibility_screening"]}
+        return {
+            "facts": empty_facts(),
+            "user_intents": ["eligibility_screening"],
+            "safety": empty_safety(),
+        }
 
     raw_facts = data.get("facts")
     if isinstance(raw_facts, dict):
@@ -56,13 +87,32 @@ def coerce_extraction(data: object) -> ExtractionResult:
             "user_intents": _str_list(data.get("user_intents")),
             "policy_question": _opt_str(data.get("policy_question")),
             "notes": _opt_str(data.get("notes")),
+            "safety": _coerce_safety(data.get("safety")),
         }
 
     # Model returned flat facts object
     return {
         "facts": _coerce_facts(data),
         "user_intents": ["eligibility_screening"],
+        "safety": _coerce_safety(data.get("safety")),
     }
+
+
+def _coerce_safety(raw: object) -> dict[str, SafetySignal]:
+    out = empty_safety()
+    if not isinstance(raw, dict):
+        return out
+    for key in out:
+        item = raw.get(key)
+        if not isinstance(item, dict):
+            continue
+        flag = bool(item.get("flag")) if item.get("flag") is not None else False
+        conf = _as_float(item.get("confidence"))
+        out[key] = {
+            "flag": flag,
+            "confidence": conf if conf is not None else 0.0,
+        }
+    return out
 
 
 def _coerce_facts(raw: object) -> ExtractionFacts:

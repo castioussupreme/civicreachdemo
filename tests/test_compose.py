@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.compose.copy import build_opening_message
 from src.compose.response import is_terminal_assessment, should_append_disclaimer
 from src.limits import DEFAULT_MAX_MESSAGE_CHARS
 from src.programs.registry import get_program
@@ -60,7 +61,12 @@ def test_fresh_case_has_opening() -> None:
     case = fresh_case(program_slug="nc-fns")
     assert len(case.recent_turns) == 1
     assert case.recent_turns[0].role == "assistant"
-    assert "household" in case.recent_turns[0].text.lower()
-    assert "income" in case.recent_turns[0].text.lower()
-    assert case.last_question == get_program("nc-fns").opening_message
+    opening = case.recent_turns[0].text
+    assert "What this screen covers" in opening
+    assert "doesn't" in opening.lower() or "does not" in opening.lower()
+    # Scope first; household/income only after go-ahead (CTA may mention them)
+    assert "Can you start by telling me" not in opening
+    assert case.scope_intro_given is True
+    assert case.screening_started is False
+    assert case.last_question == build_opening_message(get_program("nc-fns"))
     assert case.program_slug == "nc-fns"

@@ -58,6 +58,9 @@ def get_program(slug: str) -> ProgramMeta:
         root=root,
         service_area_name=service_area or str(data.get("display_name") or slug),
         service_area_short=service_short or service_area or slug,
+        apply_url=str(data.get("apply_url") or "").strip(),
+        apply_label=str(data.get("apply_label") or "").strip(),
+        apply_channel=str(data.get("apply_channel") or "").strip(),
     )
 
 

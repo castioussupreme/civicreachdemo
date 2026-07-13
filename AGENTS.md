@@ -20,7 +20,7 @@ POC NC FNS informal screening agent. Prefer small, correct changes over new infr
 
 ### How to add a program
 
-1. Create `programs/{slug}/program.yaml` (display name, `search_aliases`, opening message, service area).
+1. Create `programs/{slug}/program.yaml` (display name, `search_aliases`, opening message, service area, optional `apply_url` / `apply_label` / `apply_channel` for post-screen next steps).
 2. Add `rules/*.yaml` with `effective_from` / `effective_to` (null = open-ended), `source_id`, optional `supporting_source_ids`, and a non-empty **`requirements`** list (compose existing module types + params).
 3. Add `knowledge/manifest.json` + markdown (dual-copy income table when using `gross_income_limit`).
 4. Optional `smoke/scenarios.yaml` (+ optional line-oriented script files).

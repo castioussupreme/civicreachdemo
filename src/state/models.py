@@ -6,6 +6,7 @@ from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, Field
 
+from src.compose.copy import build_opening_message
 from src.json_types import JsonObject, JsonValue
 from src.limits import DEFAULT_MAX_MESSAGE_CHARS
 from src.programs.registry import get_program, resolve_ruleset
@@ -94,8 +95,13 @@ MAX_RECENT_TURNS = 25
 
 # Fallback if program pack cannot be loaded (tests may override via fresh_case)
 OPENING_MESSAGE = (
-    "Hi — I can help with a quick eligibility screen. "
-    "Can you start by telling me a little about your household and income?"
+    "Hi — I can help with a quick eligibility screen.\n\n"
+    "**What this screen covers:** a quick public gross-income check using household "
+    "size and before-tax income.\n"
+    "**What it doesn't:** file an application, check assets/resources, student "
+    "exemptions in full, or replace a decision by the agency.\n\n"
+    "If that sounds useful, say **yes** (or share a bit about your household and income) "
+    "and we can start the quick check."
 )
 
 
@@ -124,7 +130,7 @@ def fresh_case(
         eff_from = rs.effective_from
         eff_to = rs.effective_to
     try:
-        opening = opening_message or get_program(slug).opening_message
+        opening = opening_message or build_opening_message(get_program(slug))
     except Exception:
         opening = opening_message or OPENING_MESSAGE
 
@@ -134,6 +140,8 @@ def fresh_case(
         as_of=as_of_s,
         ruleset_effective_from=eff_from,
         ruleset_effective_to=eff_to,
+        # Scope is in the opening; do not re-prepend on the first reply
+        scope_intro_given=True,
     )
     case.append_turn("assistant", opening)
     case.last_question = opening
@@ -185,6 +193,13 @@ class EligibilityCase(BaseModel):
     recent_turns: list[DialogueTurn] = Field(default_factory=list)
     # Soft disclaimer already woven into an earlier assistant reply
     disclaimer_given: bool = False
+    # One-shot expectation-setting (what this screen covers / does not)
+    # Set True when opening already includes the blurb (fresh_case default).
+    scope_intro_given: bool = False
+    # User said yes / volunteered screening facts — safe to ask household/income
+    screening_started: bool = False
+    # One-shot post-assessment apply / agency next steps
+    next_steps_given: bool = False
 
     def append_turn(
         self,

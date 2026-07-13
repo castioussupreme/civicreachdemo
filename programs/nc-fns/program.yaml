@@ -9,9 +9,11 @@ search_aliases:
   - North Carolina food
 service_area_name: "North Carolina"
 service_area_short: "NC"
+apply_url: "https://epass.nc.gov/"
+apply_label: "NC ePASS"
+apply_channel: "your county DSS"
 program_effective_from: null
 program_effective_to: null
 opening_message: >-
   Hi — I can help with a quick check on whether you might qualify for
   North Carolina food assistance (FNS/SNAP).
-  Can you start by telling me a little about your household and income?

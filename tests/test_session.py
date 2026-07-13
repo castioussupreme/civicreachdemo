@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from src.compose.copy import build_opening_message
 from src.programs.registry import get_program
 from src.session import SESSION_TTL_SECONDS, SessionNotFoundError, SessionStore, open_session_store
 from src.state.models import CaseField, FieldStatus, fresh_case
@@ -37,8 +38,9 @@ def test_redis_round_trip() -> None:
         sid = store.create(program_slug="nc-fns")
         case = store.get(sid)
         assert case.recent_turns
-        opening = get_program("nc-fns").opening_message
+        opening = build_opening_message(get_program("nc-fns"))
         assert case.recent_turns[0].text == opening
+        assert "What this screen covers" in opening
         assert case.program_slug == "nc-fns"
         assert case.ruleset_id
         case.household_size = CaseField(status=FieldStatus.KNOWN, value=3)

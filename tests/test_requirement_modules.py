@@ -136,6 +136,7 @@ def test_planner_uses_declared_modules_only() -> None:
         as_of="2026-03-01",
         ruleset_effective_from=rs.effective_from,
         ruleset_effective_to=rs.effective_to,
+        screening_started=True,
     )
     plan = determine_missing_fields(case)
     assert plan.ready_to_assess is False

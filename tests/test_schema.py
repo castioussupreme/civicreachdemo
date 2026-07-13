@@ -14,6 +14,25 @@ def test_coerce_non_dict() -> None:
     result = coerce_extraction("not json")
     assert result["user_intents"] == ["eligibility_screening"]
     assert "facts" in result
+    assert "safety" in result
+    assert result["safety"]["off_topic"]["flag"] is False
+
+
+def test_coerce_safety_signals() -> None:
+    result = coerce_extraction(
+        {
+            "facts": {"confidence": {}},
+            "user_intents": ["other"],
+            "safety": {
+                "off_topic": {"flag": True, "confidence": 0.91},
+                "crisis": {"flag": False, "confidence": 0.99},
+            },
+        }
+    )
+    assert result["safety"]["off_topic"]["flag"] is True
+    assert result["safety"]["off_topic"]["confidence"] == 0.91
+    assert result["safety"]["crisis"]["flag"] is False
+    assert result["safety"]["prompt_injection"]["flag"] is False
 
 
 def test_coerce_nested_facts() -> None:

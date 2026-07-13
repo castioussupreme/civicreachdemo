@@ -8,9 +8,11 @@ search_aliases:
   - CDSS CalFresh
 service_area_name: "California"
 service_area_short: "CA"
+apply_url: "https://www.benefitscal.com/"
+apply_label: "BenefitsCal"
+apply_channel: "your county human services office"
 program_effective_from: null
 program_effective_to: null
 opening_message: >-
   Hi — I can help with a quick check on whether you might qualify for
   California CalFresh (food assistance / SNAP).
-  Can you start by telling me a little about your household and income?

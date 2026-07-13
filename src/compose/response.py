@@ -4,6 +4,7 @@ import json
 import logging
 from datetime import date
 
+from src.compose.copy import next_steps_blurb, resolve_program, scope_intro_blurb
 from src.compose.grounding import (
     parse_compose_json,
     required_facts,
@@ -13,7 +14,7 @@ from src.compose.grounding import (
 from src.llm.client import chat_json, chat_text
 from src.planner.missing import PlanResult
 from src.retrieval.kb import Citation, public_citation_dicts
-from src.state.models import Assessment, AssessmentStatus, EligibilityCase
+from src.state.models import Assessment, AssessmentStatus, EligibilityCase, Stage
 
 logger = logging.getLogger(__name__)
 
@@ -83,11 +84,22 @@ def compose_response(
     safety_preamble: str | None = None,
     policy_answer_context: str | None = None,
     user_message: str | None = None,
+    post_assess: bool = False,
 ) -> str:
     terminal = is_terminal_assessment(assessment)
     include_disclaimer_hint = should_append_disclaimer(case, assessment)
-
-    if terminal and assessment is not None:
+    # Already gave a terminal result earlier — follow-up chat, not a new interview
+    if post_assess and assessment is not None:
+        text = _compose_post_assess(
+            case=case,
+            assessment=assessment,
+            plan=plan,
+            citations=citations,
+            safety_preamble=safety_preamble,
+            policy_answer_context=policy_answer_context,
+            user_message=user_message,
+        )
+    elif terminal and assessment is not None:
         text = _compose_terminal(
             case=case,
             assessment=assessment,
@@ -108,15 +120,48 @@ def compose_response(
             include_disclaimer_hint=include_disclaimer_hint,
         )
 
-    # Prefer model weaving; only hard-prepend if the model ignored a blocking safety note.
-    if safety_preamble and safety_preamble.strip() and safety_preamble.strip() not in text:
-        text = safety_preamble.strip() + "\n\n" + text
+    # Prefer model weaving; if the model ignored the steer, prepend the short note.
+    if safety_preamble and safety_preamble.strip():
+        pre = safety_preamble.strip()
+        # Avoid duplicating a long preamble when the model already refused
+        refused = any(
+            k in text.lower()
+            for k in (
+                "can't",
+                "cannot",
+                "outside what i can",
+                "not related",
+                "stick to",
+                "ignore those limits",
+            )
+        )
+        if pre not in text and not refused:
+            follow = plan.next_question_hint or ""
+            if follow and follow not in text:
+                text = f"{pre} {follow}\n\n{text}".strip()
+            else:
+                text = f"{pre}\n\n{text}".strip()
+
+    # Scope intro lives in the opening message (fresh_case). Only backfill if a
+    # session was created without it (legacy / partial cases).
+    if not case.scope_intro_given and case.stage != Stage.ASSESSED:
+        prog = resolve_program(case.program_slug)
+        if prog is not None:
+            text = scope_intro_blurb(prog) + "\n\n" + text
+            case.scope_intro_given = True
 
     if should_append_disclaimer(case, assessment):
         lower = text.lower()
         if "informal" not in lower and "not an official" not in lower and "dss" not in lower:
             text = text.rstrip() + "\n\n" + DISCLAIMER
         case.disclaimer_given = True
+
+    # Terminal assess: code-owned apply / agency next steps (once)
+    if terminal and assessment is not None and not case.next_steps_given and not post_assess:
+        prog = resolve_program(case.program_slug)
+        if prog is not None:
+            text = text.rstrip() + "\n\n" + next_steps_blurb(prog)
+            case.next_steps_given = True
 
     # Near FY end: one plain-language period notice (only when effective_to is set)
     text = _maybe_append_period_notice(case, text)
@@ -267,6 +312,63 @@ def _compose_terminal(
     )
 
 
+def _compose_post_assess(
+    *,
+    case: EligibilityCase,
+    assessment: Assessment,
+    plan: PlanResult,
+    citations: list[Citation],
+    safety_preamble: str | None,
+    policy_answer_context: str | None,
+    user_message: str | None,
+) -> str:
+    """
+    After a terminal screen: answer questions / next steps without re-interviewing.
+    """
+    _ = plan
+    prog = resolve_program(case.program_slug)
+    next_steps = next_steps_blurb(prog) if prog is not None else ""
+    history = [{"role": t.role, "text": t.text} for t in case.recent_turns]
+    system = (
+        "You already finished an informal eligibility screen for this person.\n"
+        "Do NOT re-ask household size, income, residency, or restart the interview.\n"
+        "You are not a government worker and cannot submit applications.\n"
+        "\n"
+        "VOICE: short, friendly, 1-3 sentences.\n"
+        "FACTS: trust known_facts and prior_screening. Never invent dollar thresholds.\n"
+        "If they ask how to apply or what to do next, point them to the next_steps text "
+        "(use the real URL if present). If they only chit-chat, answer briefly and offer "
+        "to clarify the prior screen — do not collect new screening fields unless they "
+        "clearly correct a fact (then acknowledge; code will re-run the screen).\n"
+    )
+    user = json.dumps(
+        {
+            "mode": "post_assess_follow_up",
+            "user_just_said": user_message,
+            "conversation_history": history,
+            "known_facts": case.known_summary(),
+            "prior_screening": {
+                "status": assessment.status.value,
+                "reasons": list(assessment.reasons)[:3],
+                "monthly_income": assessment.normalized_gross_monthly,
+                "threshold": assessment.threshold_used,
+                "household_size": assessment.household_size,
+            },
+            "next_steps": next_steps,
+            "policy_context": policy_answer_context,
+            "citations": (
+                _public_citation_payload(citations, program_slug=case.program_slug)
+                if policy_answer_context
+                else []
+            ),
+            "safety_note": safety_preamble,
+            "program_slug": case.program_slug,
+        },
+        default=str,
+    )
+    return chat_text(system=system, user=user, temperature=0.4)
+
+
 def _compose_intake(
     *,
     case: EligibilityCase,
@@ -288,9 +390,15 @@ def _compose_intake(
     else:
         mode = "collect_info"
 
+    prog = resolve_program(case.program_slug)
+    program_label = (
+        prog.display_name if prog is not None else (case.program_slug or "public benefits")
+    )
+    area = prog.service_area_name if prog is not None else "the program area"
+
     system = (
-        "You are a friendly person helping someone check whether they might qualify for "
-        "North Carolina FNS (food assistance / SNAP). You are not a government worker and "
+        f"You are a friendly person helping someone check whether they might qualify for "
+        f"{program_label} ({area}). You are not a government worker and "
         "you cannot submit applications.\n"
         "\n"
         "VOICE (critical):\n"
@@ -318,6 +426,11 @@ def _compose_intake(
         "CITATIONS (when the citations list is non-empty):\n"
         "- Use only the provided title and full URL — never invent links.\n"
         "- Never mention internal ids.\n"
+        "\n"
+        "SAFETY STEER (when safety_note is present):\n"
+        "- Lead with a short refuse/steer (you may rephrase safety_note).\n"
+        "- Then ask next_question_hint as the follow-up — do not only repeat the refuse line.\n"
+        "- Do not answer off-topic questions (no math, jokes, other topics).\n"
         "\n"
         "THIS TURN mode="
         + mode

@@ -62,6 +62,19 @@ def determine_missing_fields(case: EligibilityCase) -> PlanResult:
             open_contradictions=open_conflicts,
         )
 
+    # Wait for go-ahead before household/income (or other) intake questions
+    if not case.screening_started:
+        return PlanResult(
+            missing_fields=["screening_consent"],
+            stage=Stage.INTRODUCTION,
+            next_question_hint=(
+                "Would you like to continue with a quick eligibility check? "
+                "Say yes when you're ready, or share a bit about your household and income."
+            ),
+            ready_to_assess=False,
+            open_contradictions=[],
+        )
+
     slug = (case.program_slug or "").strip()
     rid = (case.ruleset_id or "").strip()
     if not slug or not rid:

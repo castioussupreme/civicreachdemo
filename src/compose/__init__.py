@@ -1,3 +1,1 @@
-from src.compose.response import compose_response
-
-__all__ = ["compose_response"]
+"""Response composition helpers (import submodules directly)."""

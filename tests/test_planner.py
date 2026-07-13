@@ -16,9 +16,19 @@ def _case(**kwargs: object) -> EligibilityCase:
         as_of="2026-03-01",
         ruleset_effective_from=RULESET.effective_from,
         ruleset_effective_to=RULESET.effective_to,
+        # Intake tests assume the user already said go-ahead after the opening
+        screening_started=True,
     )
     data.update(kwargs)
     return EligibilityCase(**data)  # type: ignore[arg-type]
+
+
+def test_waits_for_screening_consent() -> None:
+    plan = determine_missing_fields(_case(screening_started=False))
+    assert plan.missing_fields == ["screening_consent"]
+    assert plan.ready_to_assess is False
+    assert plan.stage == Stage.INTRODUCTION
+    assert "yes" in plan.next_question_hint.lower()
 
 
 def test_starts_with_residency() -> None:

@@ -130,9 +130,29 @@ Scripts: `scripts/happy_path.txt`, `scripts/adversarial.txt`.
 | Vector RAG (OpenAI embeddings + Qdrant) over curated KB | Full-web / multi-corpus RAG                         | Semantic recall; same API key; expandable without inventing thresholds |
 | Incremental re-embed by content hash                    | Re-embed entire corpus every boot                   | Low cost; only changed docs re-indexed                                 |
 | Gross-income **screen** only                            | Full SNAP (net, resources, deductions)              | Honest incompleteness; DSS decides                                     |
+| Dual copy of income table (code + markdown)             | CSV/JSON loader or parse-doc-at-boot                | See below — OK for LLM-assisted POC                                    |
 | CLI + REST as thin clients of one agent API             | Host-side `process_turn` / dual runtime; browser UI | One pipeline & log stream; enough for live review                      |
 | Redis sessions + Docker Compose                         | Managed cloud-only infra                            | One-command local demo; optional bring-your-own URLs                   |
 | Unit tests with stubbed LLM/RAG                         | Paid live-LLM CI only                               | Fast CI; `make smoke` for live path                                    |
+
+### Income thresholds: dual copy (intentional)
+
+Eligibility **math** needs a typed in-process ruleset; RAG needs a readable public table. Those are two different consumers:
+
+| Consumer         | Location                                 | Role                                         |
+| ---------------- | ---------------------------------------- | -------------------------------------------- |
+| Engine / planner | `src/eligibility/ruleset.py` (`RULESET`) | Dollar compare, ruleset id, effective window |
+| RAG + humans     | `knowledge/nc-fns-income-limits.md`      | Citations, explanations, same FY table       |
+
+**Public source (both must stay aligned):** More In My Basket - [Am I Eligible?](https://morefood.org/using-snap/am-i-eligible/) — Maximum Gross Monthly Income (**200%**), Oct 1, 2025 - Sep 30, 2026. Ruleset id `nc-fns-screening-2025-10`.
+
+We **do not** add a boot-time CSV/JSON rules pipeline for this POC. That would be more moving parts (manifest kinds, loaders, fail-closed validation) than the table deserves. Drift risk is real but small:
+
+- Cross-links in `ruleset.py` and the income doc point at each other and at the public URL.
+- `tests/test_knowledge.py` spot-checks that ruleset amounts appear in the markdown.
+- **Coding agents** follow `AGENTS.md`: any threshold/date/ruleset-id change updates code, knowledge, and related fixtures in one change.
+
+With LLM-assisted development, that discipline is cheap; a second runtime source of truth is not free. Prefer regenerating or single-sourcing only if humans start editing limits without agents and drift becomes common.
 
 **In scope:** NC FNS gross screen, guardrails, multi-turn state, curated KB + vector retrieval, CLI + REST, Compose.
 **Out of scope:** browser UI, real applications, multi-program, voice, production auth/compliance.
@@ -171,7 +191,7 @@ src/
   extraction/       LLM → slots
   state/            case model + updates
   planner/          next question
-  eligibility/      ruleset + engine
+  eligibility/      ruleset + engine (RULESET dual-copied with income doc)
   retrieval/        chunk, embed, Qdrant, retrieve
   compose/          LLM reply
   session.py        Redis
@@ -180,9 +200,10 @@ src/
   cli.py            interactive client (no host pipeline)
   smoke.py          live happy-path via API
 knowledge/          curated policy markdown + manifest
+AGENTS.md           coding-agent rules (incl. keep ruleset ↔ income table in sync)
 ```
 
-Ruleset `nc-fns-screening-2025-10` (FY 2026 gross table in `knowledge/nc-fns-income-limits.md`).
+Ruleset `nc-fns-screening-2025-10` — same FY 2026 gross table in `src/eligibility/ruleset.py` and `knowledge/nc-fns-income-limits.md` (see dual-copy note above).
 
 ---
 

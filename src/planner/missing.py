@@ -16,6 +16,8 @@ class PlanResult:
     open_contradictions: list[str]
 
 
+# Household wording should stay aligned with knowledge/nc-fns-general-requirements.md
+# ("buy and prepare food together"). See AGENTS.md.
 QUESTION_HINTS = {
     "lives_in_nc": "Do you currently live in North Carolina?",
     "household_size": (

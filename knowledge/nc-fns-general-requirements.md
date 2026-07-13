@@ -1,7 +1,7 @@
 # General NC FNS requirements (screening summary)
 
 **Source id:** `nc-fns-general-requirements`
-**Public source:** More In My Basket – Am I Eligible?
+**Public source:** More In My Basket - Am I Eligible?
 **URL:** https://morefood.org/using-snap/am-i-eligible/
 
 ## General requirements (public summary)
@@ -15,6 +15,9 @@ Applicants generally must:
 ## What “household” means (simplified)
 
 For screening purposes, household size is the number of people who **buy and prepare food together**. Official household composition rules are more detailed and are determined by DSS.
+
+> The CLI/planner asks the same “buy and prepare food together” wording via
+> `src/planner/missing.py` (`QUESTION_HINTS`) — keep that phrase aligned (`AGENTS.md`).
 
 ## What this POC screens
 

@@ -24,6 +24,8 @@ HAPPY_PATH = ROOT / "scripts" / "happy_path.txt"
 EXPECTED_STATUS = AssessmentStatus.LIKELY_ELIGIBLE
 EXPECTED_HOUSEHOLD = 2
 EXPECTED_MONTHLY = 3000.0
+# Must match RULESET threshold for household size 2 (src/eligibility/ruleset.py
+# and knowledge/nc-fns-income-limits.md). See AGENTS.md dual-copy rules.
 EXPECTED_THRESHOLD = 3526.0
 
 

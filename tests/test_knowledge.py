@@ -24,7 +24,12 @@ def test_manifest_lists_expected_sources() -> None:
 
 
 def test_income_doc_matches_ruleset_table() -> None:
-    """Spot-check public table values appear in curated income limits doc."""
+    """
+    Spot-check: RULESET amounts appear in knowledge/nc-fns-income-limits.md.
+
+    Dual copy is intentional (math in code, table for RAG). Agents must update
+    both — see AGENTS.md. This is a soft guard, not a full table parser.
+    """
     text = (KNOWLEDGE / "nc-fns-income-limits.md").read_text(encoding="utf-8")
     assert RULESET.effective_from in text or "2025-10-01" in text or "October 1, 2025" in text
     for size, amount in RULESET.max_gross_monthly_by_size.items():

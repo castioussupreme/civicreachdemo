@@ -4,6 +4,9 @@
 **Public source:** NCDHHS Food and Nutrition Services
 **URL:** https://www.ncdhhs.gov/divisions/child-and-family-well-being/food-and-nutrition-services-food-stamps
 
+> ePASS URL and “we never apply for you” also appear in `src/safety/checks.py`
+> (`APPLICATION_RESPONSE`) and `knowledge/agent-disclaimer.md` — keep those aligned (`AGENTS.md`).
+
 ## Apply options (public information only)
 
 Residents can typically:

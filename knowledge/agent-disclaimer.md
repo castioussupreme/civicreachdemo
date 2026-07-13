@@ -11,3 +11,5 @@ This assistant is a **proof-of-concept informal screening tool** for North Carol
 - If you are in crisis, contact emergency services or appropriate crisis hotlines; this tool cannot provide emergency response.
 
 For official next steps, use public channels such as NC ePASS (https://epass.nc.gov/) or your local county DSS.
+
+> ePASS URL also in `src/safety/checks.py` and `knowledge/nc-fns-how-to-apply.md` — keep aligned (`AGENTS.md`).

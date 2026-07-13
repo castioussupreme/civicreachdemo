@@ -66,6 +66,8 @@ CRISIS_RESPONSE = (
     "I'll pause the food-assistance chat for now. Please reach out to them."
 )
 
+# Apply pointers — keep URL in sync with knowledge/nc-fns-how-to-apply.md and
+# knowledge/agent-disclaimer.md (public NCDHHS / ePASS). See AGENTS.md.
 APPLICATION_RESPONSE = (
     "I can't submit an application or log into government systems for you — only you "
     "(or someone you authorize with the agency) can do that.\n\n"

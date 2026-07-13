@@ -20,7 +20,7 @@ You are building a proof-of-concept text-based AI agent that helps a resident de
 - We pay you $200 to start the case study (_to cover any/all development/LLM costs_)
 - We pay you $800 after submitting a case study solution (_to compensate you for your time_)
 - **You submit your solution and attend a review meeting 7 days after beginning** (after receiving this case study)
-- We strongly prefer **smaller scope done well over broad scope half-baked**. 15–20 hours is short on purpose: it should force you to make meaningful tradeoffs about what a demo-quality agent needs. Tell us what you cut and why.
+- We strongly prefer **smaller scope done well over broad scope half-baked**. 15-20 hours is short on purpose: it should force you to make meaningful tradeoffs about what a demo-quality agent needs. Tell us what you cut and why.
 
 **At a high level, the agent must:**
 
@@ -49,7 +49,7 @@ You are building a proof-of-concept text-based AI agent that helps a resident de
 
 ## **Final Note**
 
-We **do not** expect a fully production-ready system in 15–20 hours — this is a proof-of-concept. We're primarily looking at how you think about agent architecture, guardrails, failure modes, and tradeoffs from end to end.
+We **do not** expect a fully production-ready system in 15-20 hours — this is a proof-of-concept. We're primarily looking at how you think about agent architecture, guardrails, failure modes, and tradeoffs from end to end.
 
 If you find yourself running out of time, it's better to deliver a well-structured partial solution _with clear documentation of what you'd do next_ than a messy or broken "feature-complete" one. Smaller scope done well beats broad scope half-baked, every time.
 

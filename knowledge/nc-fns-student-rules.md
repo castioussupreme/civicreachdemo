@@ -24,6 +24,10 @@ Outreach materials commonly list exemptions such as:
 
 ## POC behavior
 
+> Code path: `src/eligibility/engine.py` softens a gross-income “pass” to
+> **unable to determine** for students and does **not** evaluate exemptions.
+> Keep this doc and that branch consistent (`AGENTS.md`).
+
 If the user indicates they are a college student, this agent:
 
 1. Still may run a **gross income screen** when other facts are known.

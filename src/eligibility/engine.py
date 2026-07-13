@@ -119,7 +119,8 @@ def calculate_eligibility(
         )
         status = AssessmentStatus.LIKELY_INELIGIBLE
 
-    # Student: report income result clearly, but do not claim full student determination
+    # Student: income screen only — full exemptions live in knowledge/nc-fns-student-rules.md
+    # (not modeled in code). Keep that policy doc aligned if this behavior changes. See AGENTS.md.
     if case.is_student.is_usable() and case.is_student.value is True:
         source_ids = [*source_ids, "nc-fns-student-rules"]
         caveats.append(

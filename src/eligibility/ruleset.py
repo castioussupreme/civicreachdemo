@@ -1,3 +1,17 @@
+"""
+Versioned NC FNS screening rules (code path — authoritative for eligibility math).
+
+DUAL COPY — keep in sync with the RAG/display table:
+  knowledge/nc-fns-income-limits.md
+  knowledge/manifest.json  (source id nc-fns-income-limits)
+See AGENTS.md ("Dual copy of income thresholds").
+
+Public provenance (both copies):
+  More In My Basket - Am I Eligible?
+  https://morefood.org/using-snap/am-i-eligible/
+  Table: Maximum Gross Monthly Income (200%), effective 2025-10-01 - 2026-09-30
+"""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -7,11 +21,10 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Ruleset:
     """
-    Versioned NC FNS screening rules.
+    Versioned NC FNS screening rules loaded in process memory.
 
-    These thresholds are the public "Maximum Gross Monthly Income (200%)" table
-    for Oct 1, 2025 - Sep 30, 2026 from More In My Basket outreach materials.
-    Some households face a 130% test determined by DSS - this POC does not
+    Thresholds mirror knowledge/nc-fns-income-limits.md (same public table).
+    Some households face a 130% test determined by DSS — this POC does not
     independently decide which percentage applies.
     """
 
@@ -33,6 +46,7 @@ class Ruleset:
         return base + (size - 8) * self.additional_member_increment
 
 
+# Must match knowledge/nc-fns-income-limits.md gross monthly table (+$918 per extra member).
 RULESET = Ruleset(
     id="nc-fns-screening-2025-10",
     effective_from="2025-10-01",

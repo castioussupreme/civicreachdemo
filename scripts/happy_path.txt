@@ -1,6 +1,5 @@
-# Happy path — multi-turn user utterances for live LLM (OPENAI_API_KEY required)
-# Run: poetry run python -m src.cli --script scripts/happy_path.txt
-# Smoke expects: HH=2, $3000/mo gross → likely eligible (threshold $3526)
+# Happy path — multi-turn user utterances for live LLM / make smoke
+# Expect: HH=2, $3000/mo gross household → likely_eligible (threshold from RULESET size 2)
 Hi, I want to know if I might qualify for food assistance in North Carolina
 Yes, I live in NC
 There are two of us who buy and cook food together

@@ -48,9 +48,9 @@ cli: install
 	@echo "==> CLI → agent API (PUBLIC_BASE_URL from .env.runtime)…"
 	$(POETRY) run python -m src.cli
 
-# Live E2E via agent API + scripts/happy_path.txt (stack must be up).
+# Live E2E via agent API: happy + net + individual + student + injection (stack must be up).
 smoke: install
-	@echo "==> Smoke test via agent API (stack must be up)…"
+	@echo "==> Smoke (multi-scenario) via agent API (stack must be up)…"
 	$(POETRY) run python -m src.smoke
 
 # Re-sync knowledge embeddings into Qdrant (only changed docs re-embedded).

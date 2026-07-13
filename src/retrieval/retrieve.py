@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 
 from src.config import get_settings
-from src.programs.registry import default_program_slug
 from src.retrieval.embeddings import embed_query
 from src.retrieval.index import ensure_index, vector_index_ready
 from src.retrieval.kb import Citation, enrich_citation
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 def retrieve(
     query: str,
     *,
-    program_slug: str | None = None,
+    program_slug: str,
     source_ids: list[str] | None = None,
     limit: int = 3,
     as_of: str | None = None,
@@ -29,7 +28,9 @@ def retrieve(
     still within the same program_slug. as_of (ISO date) drops docs outside
     their effective window.
     """
-    slug = (program_slug or "").strip() or default_program_slug()
+    slug = (program_slug or "").strip()
+    if not slug:
+        raise ValueError("program_slug is required for retrieve (no default program)")
     ensure_index()
     if not vector_index_ready():
         logger.debug("Vector index not ready — retrieve returns no citations")
@@ -145,9 +146,9 @@ def _vector_retrieve(
 def retrieve_supporting_policy(
     assessment_source_ids: list[str],
     *,
+    program_slug: str,
     user_query: str = "",
     limit: int = 3,
-    program_slug: str | None = None,
     as_of: str | None = None,
 ) -> list[Citation]:
     return retrieve(

@@ -7,8 +7,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from src.config import KNOWLEDGE_DIR
-from src.programs.registry import default_program_slug, get_program
+from src.programs.registry import get_program
 
 
 @dataclass(frozen=True)
@@ -38,11 +37,10 @@ class Citation:
 
 @lru_cache
 def load_corpus(program_slug: str = "") -> tuple[SourceDoc, ...]:
-    slug = program_slug or default_program_slug()
-    try:
-        knowledge_dir = get_program(slug).knowledge_dir
-    except Exception:
-        knowledge_dir = KNOWLEDGE_DIR
+    slug = (program_slug or "").strip()
+    if not slug:
+        raise ValueError("program_slug is required for load_corpus (no default program)")
+    knowledge_dir = get_program(slug).knowledge_dir
     return _load_corpus_dir(knowledge_dir, slug)
 
 
@@ -71,7 +69,10 @@ def _load_corpus_dir(knowledge_dir: Path, program_slug: str) -> tuple[SourceDoc,
 
 
 def get_by_id(source_id: str, *, program_slug: str = "") -> SourceDoc | None:
-    for d in load_corpus(program_slug):
+    slug = (program_slug or "").strip()
+    if not slug:
+        return None
+    for d in load_corpus(slug):
         if d.id == source_id:
             return d
     return None
@@ -185,9 +186,18 @@ def public_citation_dicts(
     return out
 
 
-def format_citations(citations: list[Citation]) -> str:
+def format_citations(
+    citations: list[Citation],
+    *,
+    program_slug: str | None = None,
+) -> str:
     """Human-facing source list: title + URL (no internal source ids)."""
-    public = [enrich_citation(c) for c in citations if is_public_source_id(c.source_id)]
+    slug = (program_slug or "").strip()
+    public = [
+        enrich_citation(c, program_slug=slug or c.program_slug)
+        for c in citations
+        if is_public_source_id(c.source_id)
+    ]
     usable: list[Citation] = []
     for c in public:
         title = (c.title or "").strip()

@@ -15,6 +15,7 @@ os.environ.setdefault("PUBLIC_QDRANT_URL", "http://127.0.0.1:6333")
 os.environ.setdefault("QDRANT_URL", "http://127.0.0.1:6333")
 
 from src.config import get_settings
+from src.session import SessionNotFoundError
 from src.state.models import EligibilityCase, fresh_case
 
 
@@ -27,7 +28,7 @@ class FakeSessionStore:
     def create(
         self,
         *,
-        program_slug: str | None = None,
+        program_slug: str,
         as_of: str | None = None,
     ) -> str:
         sid = str(uuid.uuid4())[:8]
@@ -36,7 +37,7 @@ class FakeSessionStore:
 
     def get(self, session_id: str) -> EligibilityCase:
         if session_id not in self._sessions:
-            self._sessions[session_id] = fresh_case()
+            raise SessionNotFoundError(session_id)
         return self._sessions[session_id]
 
     def set(self, session_id: str, case: EligibilityCase) -> None:
@@ -46,7 +47,7 @@ class FakeSessionStore:
         self,
         session_id: str,
         *,
-        program_slug: str | None = None,
+        program_slug: str,
         as_of: str | None = None,
     ) -> EligibilityCase:
         case = fresh_case(program_slug=program_slug, as_of=as_of)

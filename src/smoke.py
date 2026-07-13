@@ -24,7 +24,7 @@ from src.api_client import AgentApiClient, AgentApiError
 from src.config import resolve_public_api_base
 from src.json_types import JsonObject
 from src.logging_config import configure_client_logging
-from src.programs.registry import default_program_slug, get_program, resolve_ruleset
+from src.programs.registry import get_program, resolve_ruleset
 from src.state.models import AssessmentStatus
 
 
@@ -176,11 +176,18 @@ def run_scenario(
 
 def run_smoke(
     *,
-    program_slug: str | None = None,
+    program_slug: str,
     scenarios: list[SmokeScenario] | None = None,
 ) -> int:
     configure_client_logging(verbose=False)
-    slug = program_slug or default_program_slug()
+    slug = (program_slug or "").strip()
+    if not slug:
+        print(
+            "FAIL: --program <slug> is required (no default). "
+            "Example: poetry run python -m src.smoke --program nc-fns",
+            file=sys.stderr,
+        )
+        return 1
     print(f"==> Smoke: multi-scenario via agent API (program={slug})")
     try:
         base = resolve_public_api_base()
@@ -225,7 +232,10 @@ def run_smoke(
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Live multi-scenario smoke via agent API")
     parser.add_argument(
-        "--program", type=str, default=None, help="Program slug (default: first in registry)"
+        "--program",
+        type=str,
+        required=True,
+        help="Program slug (required; e.g. nc-fns or ca-calfresh)",
     )
     args = parser.parse_args(argv)
     sys.exit(run_smoke(program_slug=args.program))

@@ -7,8 +7,10 @@ from typing import TypeVar
 import pytest
 from src.eligibility.engine import calculate_eligibility
 from src.eligibility.income import normalize_to_monthly
-from src.eligibility.ruleset import RULESET
+from src.eligibility.ruleset import load_ruleset
 from src.state.models import AssessmentStatus, CaseField, EligibilityCase, FieldStatus
+
+RULESET = load_ruleset("nc-fns")
 
 T = TypeVar("T")
 
@@ -19,6 +21,18 @@ def _known(value: T) -> CaseField[T]:
 
 def _uncertain(value: T) -> CaseField[T]:
     return CaseField(status=FieldStatus.UNCERTAIN, value=value)
+
+
+def _base_case(**kwargs: object) -> EligibilityCase:
+    data: dict[str, object] = {
+        "program_slug": "nc-fns",
+        "ruleset_id": RULESET.id,
+        "as_of": "2026-03-01",
+        "ruleset_effective_from": RULESET.effective_from,
+        "ruleset_effective_to": RULESET.effective_to,
+    }
+    data.update(kwargs)
+    return EligibilityCase(**data)  # type: ignore[arg-type]
 
 
 def test_normalize_income_all_periods() -> None:
@@ -50,7 +64,7 @@ def test_threshold_rejects_zero_size() -> None:
 
 
 def test_likely_eligible_single() -> None:
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(2000.0),
@@ -64,7 +78,7 @@ def test_likely_eligible_single() -> None:
 
 def test_eligible_at_exact_threshold() -> None:
     """At-or-below threshold is likely eligible."""
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(2610.0),
@@ -74,7 +88,7 @@ def test_eligible_at_exact_threshold() -> None:
 
 
 def test_likely_ineligible_one_dollar_over() -> None:
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(2610.01),
@@ -84,7 +98,7 @@ def test_likely_ineligible_one_dollar_over() -> None:
 
 
 def test_likely_ineligible_high_income() -> None:
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(5000.0),
@@ -95,12 +109,12 @@ def test_likely_ineligible_high_income() -> None:
 
 def test_household_of_four_screen() -> None:
     thr = RULESET.threshold_for_household(4)
-    under = EligibilityCase(
+    under = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(4),
         normalized_gross_monthly=_known(thr - 1),
     )
-    over = EligibilityCase(
+    over = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(4),
         normalized_gross_monthly=_known(thr + 1),
@@ -113,28 +127,28 @@ def test_household_of_four_screen() -> None:
 
 
 def test_not_in_nc() -> None:
-    case = EligibilityCase(lives_in_nc=_known(False))
+    case = _base_case(lives_in_nc=_known(False))
     result = calculate_eligibility(case)
     assert result.status == AssessmentStatus.LIKELY_INELIGIBLE
     assert "nc-fns-overview" in result.source_ids
 
 
 def test_missing_residency() -> None:
-    case = EligibilityCase()
+    case = _base_case()
     result = calculate_eligibility(case)
     assert result.status == AssessmentStatus.NEEDS_MORE_INFORMATION
     assert "residency" in result.reasons[0].lower()
 
 
 def test_missing_household_size() -> None:
-    case = EligibilityCase(lives_in_nc=_known(True))
+    case = _base_case(lives_in_nc=_known(True))
     result = calculate_eligibility(case)
     assert result.status == AssessmentStatus.NEEDS_MORE_INFORMATION
     assert "household" in result.reasons[0].lower()
 
 
 def test_missing_income() -> None:
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(2),
     )
@@ -144,7 +158,7 @@ def test_missing_income() -> None:
 
 
 def test_uncertain_income_amount_needs_more_info() -> None:
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(1),
         income_amount=_uncertain(2500.0),
@@ -155,7 +169,7 @@ def test_uncertain_income_amount_needs_more_info() -> None:
 
 
 def test_net_income_unable_to_determine_when_under_threshold() -> None:
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(1),
         gross_or_net=_known("net"),
@@ -171,7 +185,7 @@ def test_net_income_unable_to_determine_when_under_threshold() -> None:
 
 def test_net_takehome_above_threshold_likely_ineligible() -> None:
     """Gross ≥ take-home; if take-home alone exceeds the limit, fail the gross screen."""
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(1),
         gross_or_net=_known("net"),
@@ -184,7 +198,7 @@ def test_net_takehome_above_threshold_likely_ineligible() -> None:
 
 
 def test_individual_income_multi_person_unable_when_under_threshold() -> None:
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(3),
         household_or_individual=_known("individual"),
@@ -197,7 +211,7 @@ def test_individual_income_multi_person_unable_when_under_threshold() -> None:
 
 def test_individual_income_above_threshold_likely_ineligible() -> None:
     """Total household income ≥ one person's; if one person already over limit → fail."""
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(3),
         household_or_individual=_known("individual"),
@@ -209,7 +223,7 @@ def test_individual_income_above_threshold_likely_ineligible() -> None:
 
 
 def test_net_and_individual_above_threshold() -> None:
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(4),
         gross_or_net=_known("net"),
@@ -221,7 +235,7 @@ def test_net_and_individual_above_threshold() -> None:
 
 
 def test_student_softens_eligible_to_unable() -> None:
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(2000.0),
@@ -234,7 +248,7 @@ def test_student_softens_eligible_to_unable() -> None:
 
 def test_student_ineligible_stays_ineligible() -> None:
     """Student caveat does not override a failed gross screen."""
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(9000.0),
@@ -246,7 +260,7 @@ def test_student_ineligible_stays_ineligible() -> None:
 
 
 def test_elderly_adds_caveat_not_status_change() -> None:
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(2000.0),
@@ -258,7 +272,7 @@ def test_elderly_adds_caveat_not_status_change() -> None:
 
 
 def test_assessment_always_includes_disclaimer_caveats() -> None:
-    case = EligibilityCase(
+    case = _base_case(
         lives_in_nc=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(2000.0),

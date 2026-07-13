@@ -17,6 +17,7 @@ from src.api.schemas import (
     ProgramCatalogItem,
     SessionCreateRequest,
     SessionCreateResponse,
+    SessionResetRequest,
     StateResponse,
 )
 from src.config import get_settings
@@ -26,12 +27,11 @@ from src.programs.registry import (
     ProgramNotAvailableError,
     ProgramNotFoundError,
     catalog_programs,
-    default_program_slug,
     resolve_ruleset,
 )
 from src.retrieval.index import ensure_index
 from src.retrieval.kb import public_citation_dicts
-from src.session import SessionStoreProtocol, open_session_store
+from src.session import SessionNotFoundError, SessionStoreProtocol, open_session_store
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -166,8 +166,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="NC FNS Eligibility Agent",
-    description="Informal NC FNS / SNAP screening POC — not an official determination.",
+    title="Public Benefits Eligibility Agent",
+    description="Informal multi-program food-assistance screening POC — not an official determination.",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -178,18 +178,10 @@ def health() -> HealthResponse:
     settings = get_settings()
     as_of = date.today()
     active = catalog_programs(as_of=as_of, limit=100)
-    default_slug = default_program_slug()
-    try:
-        default_rs = resolve_ruleset(default_slug, as_of)
-        ruleset_id = default_rs.id
-    except Exception:
-        ruleset_id = ""
     return HealthResponse(
         status="ok",
         service="eligibility-agent",
         openai_model=settings.openai_model,
-        ruleset_id=ruleset_id,
-        default_program=default_slug,
         active_programs=len(active),
         public_base_url=settings.public_base_url,
         endpoints=_endpoints(settings.public_base_url),
@@ -226,10 +218,15 @@ def list_programs(
 @app.post("/api/session", response_model=SessionCreateResponse)
 def create_session(
     request: Request,
-    body: SessionCreateRequest | None = None,
+    body: SessionCreateRequest,
 ) -> SessionCreateResponse:
-    payload = body or SessionCreateRequest()
-    slug = (payload.program_slug or "").strip() or default_program_slug()
+    slug = (body.program_slug or "").strip()
+    if not slug:
+        raise HTTPException(
+            status_code=400,
+            detail="program_slug is required (list programs via GET /api/programs)",
+        )
+    payload = body
     as_of = (payload.as_of or "").strip() or None
     when = date.today()
     if as_of:
@@ -265,8 +262,19 @@ def chat(
     debug: Annotated[bool, Query()] = False,
 ) -> ChatResponse | JSONResponse:
     sessions = _get_store(request)
-    session_id = body.session_id or sessions.create()
-    case = sessions.get(session_id)
+    if not body.session_id:
+        raise HTTPException(
+            status_code=400,
+            detail="session_id is required; create a session with program_slug first",
+        )
+    try:
+        case = sessions.get(body.session_id)
+    except SessionNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail="session not found or expired; create a session with program_slug first",
+        ) from None
+    session_id = body.session_id
     program_slug = case.program_slug
     try:
         result = process_turn(body.message, case)
@@ -319,7 +327,10 @@ def chat(
 def session_state(request: Request, session_id: str) -> StateResponse:
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id required")
-    case = _get_store(request).get(session_id)
+    try:
+        case = _get_store(request).get(session_id)
+    except SessionNotFoundError:
+        raise HTTPException(status_code=404, detail="session not found or expired") from None
     assessment_payload: dict[str, object] | None = None
     source_ids: list[str] = []
     if case.assessment is not None:
@@ -343,12 +354,23 @@ def session_state(request: Request, session_id: str) -> StateResponse:
 def reset_session(
     request: Request,
     session_id: str,
-    body: SessionCreateRequest | None = None,
+    body: SessionResetRequest | None = None,
 ) -> SessionCreateResponse:
-    payload = body or SessionCreateRequest()
-    existing = _get_store(request).get(session_id)
-    slug = (payload.program_slug or "").strip() or existing.program_slug or default_program_slug()
-    as_of = (payload.as_of or "").strip() or existing.as_of or None
+    payload = body or SessionResetRequest()
+    try:
+        existing = _get_store(request).get(session_id)
+        existing_slug = existing.program_slug
+        existing_as_of = existing.as_of
+    except SessionNotFoundError:
+        existing_slug = ""
+        existing_as_of = ""
+    slug = (payload.program_slug or "").strip() or existing_slug
+    if not slug:
+        raise HTTPException(
+            status_code=400,
+            detail="program_slug is required when resetting an unknown session",
+        )
+    as_of = (payload.as_of or "").strip() or existing_as_of or None
     when = date.today()
     if as_of:
         try:

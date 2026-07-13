@@ -129,13 +129,6 @@ def catalog_programs(
     return entries[:limit]
 
 
-def default_program_slug() -> str:
-    slugs = list_enabled_slugs()
-    if not slugs:
-        raise ProgramNotFoundError("No programs registered in programs/registry.yaml")
-    return slugs[0]
-
-
 @lru_cache
 def _load_yaml_cached(path_str: str, mtime_ns: int) -> dict[str, object]:
     # mtime_ns is part of the cache key so file edits bust the cache

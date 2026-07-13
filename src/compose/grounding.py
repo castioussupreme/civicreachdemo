@@ -98,6 +98,7 @@ def template_terminal_reply(
     citations: list[Citation] | None = None,
     include_disclaimer: bool = True,
     disclaimer: str = "",
+    program_slug: str = "",
 ) -> str:
     """
     Graceful failure: code-owned prose from the assessment only.
@@ -146,7 +147,12 @@ def template_terminal_reply(
             + " Applying through ePASS or your county DSS is the reliable next step."
         )
 
-    for c in public_citation_dicts(citations, source_ids=assessment.source_ids, limit=2):
+    for c in public_citation_dicts(
+        citations,
+        source_ids=assessment.source_ids,
+        limit=2,
+        program_slug=program_slug,
+    ):
         title = c.get("title") or "Public source"
         url = c.get("url")
         if url:

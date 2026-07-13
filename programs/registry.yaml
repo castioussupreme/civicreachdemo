@@ -1,5 +1,4 @@
-# Deployed program packs (slugs under programs/)
-# Default program is first: nc-fns
+# Deployed program packs (slugs under programs/). No automatic default — clients must pick a slug.
 programs:
   - nc-fns
   - ca-calfresh

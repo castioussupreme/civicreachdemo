@@ -14,11 +14,15 @@ from src.state.models import EligibilityCase, fresh_case
 SESSION_TTL_SECONDS = 60 * 60 * 24  # 24 hours
 
 
+class SessionNotFoundError(KeyError):
+    """Session id missing or expired — client must create a session with a program."""
+
+
 class SessionStoreProtocol(Protocol):
     def create(
         self,
         *,
-        program_slug: str | None = None,
+        program_slug: str,
         as_of: str | None = None,
     ) -> str: ...
 
@@ -30,7 +34,7 @@ class SessionStoreProtocol(Protocol):
         self,
         session_id: str,
         *,
-        program_slug: str | None = None,
+        program_slug: str,
         as_of: str | None = None,
     ) -> EligibilityCase: ...
 
@@ -40,7 +44,8 @@ class SessionStore:
     Persist cases in Redis as JSON with a sliding TTL.
 
     Expiry deletes conversation history and structured case data together
-    (single key `fns:case:{id}`). After expiry, get() starts a fresh case.
+    (single key `fns:case:{id}`). Missing/expired keys raise SessionNotFoundError
+    — callers must create a session with an explicit program_slug.
     """
 
     def __init__(self, redis_url: str, *, ttl_seconds: int = SESSION_TTL_SECONDS) -> None:
@@ -51,9 +56,11 @@ class SessionStore:
     def create(
         self,
         *,
-        program_slug: str | None = None,
+        program_slug: str,
         as_of: str | None = None,
     ) -> str:
+        if not (program_slug or "").strip():
+            raise ValueError("program_slug is required")
         sid = str(uuid.uuid4())[:8]
         self.set(sid, fresh_case(program_slug=program_slug, as_of=as_of))
         return sid
@@ -61,10 +68,7 @@ class SessionStore:
     def get(self, session_id: str) -> EligibilityCase:
         raw = self._client.get(self._prefix + session_id)
         if raw is None:
-            # Missing or expired key → new empty screening session
-            case = fresh_case()
-            self.set(session_id, case)
-            return case
+            raise SessionNotFoundError(session_id)
         return EligibilityCase.model_validate_json(raw)
 
     def set(self, session_id: str, case: EligibilityCase) -> None:
@@ -78,9 +82,11 @@ class SessionStore:
         self,
         session_id: str,
         *,
-        program_slug: str | None = None,
+        program_slug: str,
         as_of: str | None = None,
     ) -> EligibilityCase:
+        if not (program_slug or "").strip():
+            raise ValueError("program_slug is required")
         case = fresh_case(program_slug=program_slug, as_of=as_of)
         self.set(session_id, case)
         return case

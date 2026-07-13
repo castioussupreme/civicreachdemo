@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.eligibility.ruleset import RULESET, Ruleset
+from src.eligibility.ruleset import Ruleset
 from src.programs.registry import get_program, get_ruleset_by_id
 from src.state.models import (
     Assessment,
@@ -11,9 +11,12 @@ from src.state.models import (
 
 
 def _service_area(case: EligibilityCase) -> tuple[str, str]:
-    """Return (full name, short code) for residency messaging."""
+    """Return (full name, display name) for residency messaging."""
+    slug = (case.program_slug or "").strip()
+    if not slug:
+        return "the program service area", "this program"
     try:
-        prog = get_program(case.program_slug or "nc-fns")
+        prog = get_program(slug)
         return prog.service_area_name, prog.display_name
     except Exception:
         return "the program service area", "this program"
@@ -22,12 +25,11 @@ def _service_area(case: EligibilityCase) -> tuple[str, str]:
 def _ruleset_for_case(case: EligibilityCase, ruleset: Ruleset | None) -> Ruleset:
     if ruleset is not None:
         return ruleset
-    if case.program_slug and case.ruleset_id:
-        try:
-            return get_ruleset_by_id(case.program_slug, case.ruleset_id)
-        except Exception:
-            pass
-    return RULESET
+    slug = (case.program_slug or "").strip()
+    rid = (case.ruleset_id or "").strip()
+    if not slug or not rid:
+        raise ValueError("case.program_slug and case.ruleset_id are required (no default program)")
+    return get_ruleset_by_id(slug, rid)
 
 
 def calculate_eligibility(
@@ -60,14 +62,11 @@ def calculate_eligibility(
 
     # Residency hard gate for the program's service area
     if case.lives_in_nc.status == FieldStatus.KNOWN and case.lives_in_nc.value is False:
-        overview = (
-            "nc-fns-overview"
-            if case.program_slug == "nc-fns"
-            else (
-                ruleset.supporting_source_ids[0]
-                if ruleset.supporting_source_ids
-                else ruleset.source_id
-            )
+        overview = next(
+            (s for s in ruleset.supporting_source_ids if "overview" in s),
+            ruleset.supporting_source_ids[0]
+            if ruleset.supporting_source_ids
+            else ruleset.source_id,
         )
         return Assessment(
             status=AssessmentStatus.LIKELY_INELIGIBLE,

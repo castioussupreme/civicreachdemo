@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from src.programs.registry import get_program
-from src.session import SESSION_TTL_SECONDS, SessionStore, open_session_store
-from src.state.models import CaseField, EligibilityCase, FieldStatus, fresh_case
+from src.session import SESSION_TTL_SECONDS, SessionNotFoundError, SessionStore, open_session_store
+from src.state.models import CaseField, FieldStatus, fresh_case
 
 
 def test_open_session_store() -> None:
@@ -33,7 +34,7 @@ def test_redis_round_trip() -> None:
 
     with patch("src.session.redis.Redis.from_url", return_value=client):
         store = SessionStore("redis://localhost:6379/0")
-        sid = store.create()
+        sid = store.create(program_slug="nc-fns")
         case = store.get(sid)
         assert case.recent_turns
         opening = get_program("nc-fns").opening_message
@@ -48,23 +49,28 @@ def test_redis_round_trip() -> None:
         assert again.household_size.value == 3
         assert again.turn_count == 1
 
-        store.reset(sid)
+        store.reset(sid, program_slug="nc-fns")
         fresh = store.get(sid)
         assert fresh.household_size.value is None
         assert fresh.recent_turns[0].text == opening
 
 
-def test_redis_get_missing_key_initializes() -> None:
+def test_redis_get_missing_key_raises() -> None:
     client = MagicMock()
     client.get.return_value = None
-    client.set.return_value = True
 
     with patch("src.session.redis.Redis.from_url", return_value=client):
         store = SessionStore("redis://localhost:6379/0")
-        case = store.get("missing-id")
-        assert isinstance(case, EligibilityCase)
-        assert case.recent_turns[0].role == "assistant"
-        assert client.set.called
+        with pytest.raises(SessionNotFoundError):
+            store.get("missing-id")
+
+
+def test_create_requires_program_slug() -> None:
+    client = MagicMock()
+    with patch("src.session.redis.Redis.from_url", return_value=client):
+        store = SessionStore("redis://localhost:6379/0")
+        with pytest.raises(ValueError, match="program_slug"):
+            store.create(program_slug="")  # type: ignore[arg-type]
 
 
 def test_set_uses_sliding_ttl() -> None:
@@ -72,7 +78,7 @@ def test_set_uses_sliding_ttl() -> None:
     client = MagicMock()
     with patch("src.session.redis.Redis.from_url", return_value=client):
         store = SessionStore("redis://localhost:6379/0")
-        store.set("abc123", fresh_case())
+        store.set("abc123", fresh_case(program_slug="nc-fns"))
         assert client.set.called
         _args, kwargs = client.set.call_args
         assert kwargs.get("ex") == SESSION_TTL_SECONDS

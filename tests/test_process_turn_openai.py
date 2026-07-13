@@ -9,7 +9,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key-not-used")
 
 from src.openai_errors import OpenAIServiceError
 from src.process_turn import process_turn
-from src.state.models import EligibilityCase
+from src.state.models import fresh_case
 
 
 def test_extract_quota_returns_friendly_reply() -> None:
@@ -20,7 +20,7 @@ def test_extract_quota_returns_friendly_reply() -> None:
         log_message="quota log",
     )
     with patch("src.process_turn.extract_facts", side_effect=err):
-        result = process_turn("I live in NC", EligibilityCase())
+        result = process_turn("I live in NC", fresh_case(program_slug="nc-fns"))
     assert result.safety_action == "service_unavailable"
     assert result.reply == "I'm having trouble completing that right now."
     assert "openai" not in result.reply.lower()
@@ -43,7 +43,7 @@ def test_compose_quota_returns_friendly_reply() -> None:
         ),
         patch("src.process_turn.compose_response", side_effect=err),
     ):
-        result = process_turn("hello", EligibilityCase())
+        result = process_turn("hello", fresh_case(program_slug="nc-fns"))
     assert result.safety_action == "service_unavailable"
     assert result.reply == "Something went wrong on my side."
     assert result.debug.get("service_phase") == "compose"

@@ -20,7 +20,7 @@ from src.retrieval.qdrant_store import StoredChunk
 
 
 def test_corpus_loads() -> None:
-    docs = load_corpus()
+    docs = load_corpus("nc-fns")
     ids = {d.id for d in docs}
     assert "nc-fns-income-limits" in ids
     assert "nc-fns-gross-income-tests" in ids
@@ -30,17 +30,17 @@ def test_corpus_loads() -> None:
 
 def test_gross_income_tests_in_corpus() -> None:
     load_corpus.cache_clear()
-    doc = get_by_id("nc-fns-gross-income-tests")
+    doc = get_by_id("nc-fns-gross-income-tests", program_slug="nc-fns")
     assert doc is not None
     assert "130%" in doc.text
     assert doc.url and "morefood.org" in doc.url
 
 
 def test_get_by_id() -> None:
-    doc = get_by_id("nc-fns-income-limits")
+    doc = get_by_id("nc-fns-income-limits", program_slug="nc-fns")
     assert doc is not None
     assert "income" in doc.title.lower() or "limit" in doc.text.lower()
-    assert get_by_id("does-not-exist") is None
+    assert get_by_id("does-not-exist", program_slug="nc-fns") is None
 
 
 def _chunk(
@@ -78,7 +78,7 @@ def test_retrieve_maps_hits_to_citations() -> None:
     ):
         gs.return_value.effective_qdrant_url.return_value = "http://localhost:6333"
         gs.return_value.retrieval_top_k = 3
-        cites = retrieve("food stamp income cutoff", limit=2)
+        cites = retrieve("food stamp income cutoff", program_slug="nc-fns", limit=2)
     assert len(cites) == 2
     assert cites[0].source_id == "nc-fns-income-limits"
     assert "Gross monthly" in cites[0].snippet
@@ -118,6 +118,7 @@ def test_retrieve_by_source_ids_prefers_listed() -> None:
         gs.return_value.retrieval_top_k = 3
         cites = retrieve_supporting_policy(
             ["agent-disclaimer", "nc-fns-income-limits"],
+            program_slug="nc-fns",
             user_query="eligibility",
             limit=2,
         )
@@ -137,13 +138,14 @@ def test_retrieve_respects_limit() -> None:
     ):
         gs.return_value.effective_qdrant_url.return_value = "http://localhost:6333"
         gs.return_value.retrieval_top_k = 3
-        cites = retrieve("query", limit=2)
+        cites = retrieve("query", program_slug="nc-fns", limit=2)
     assert len(cites) == 2
 
 
 def test_public_citation_dicts_titles_and_urls_only() -> None:
     rows = public_citation_dicts(
         source_ids=["nc-fns-income-limits", "agent-disclaimer"],
+        program_slug="nc-fns",
     )
     assert len(rows) == 1
     assert "title" in rows[0]
@@ -178,4 +180,4 @@ def test_retrieve_returns_empty_on_embed_failure() -> None:
         patch("src.retrieval.retrieve.get_settings") as gs,
     ):
         gs.return_value.effective_qdrant_url.return_value = "http://localhost:6333"
-        assert retrieve("anything") == []
+        assert retrieve("anything", program_slug="nc-fns") == []

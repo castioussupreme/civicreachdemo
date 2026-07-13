@@ -9,8 +9,6 @@ class HealthResponse(BaseModel):
     status: str
     service: str
     openai_model: str
-    ruleset_id: str
-    default_program: str
     active_programs: int
     public_base_url: str
     endpoints: dict[str, str]
@@ -27,8 +25,15 @@ class ProgramCatalogItem(BaseModel):
 
 
 class SessionCreateRequest(BaseModel):
-    program_slug: str | None = None
+    program_slug: str  # required — no default program
     as_of: str | None = None  # ISO date YYYY-MM-DD
+
+
+class SessionResetRequest(BaseModel):
+    """Reset may omit program_slug to keep the session's existing pack."""
+
+    program_slug: str | None = None
+    as_of: str | None = None
 
 
 class SessionCreateResponse(BaseModel):

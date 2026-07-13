@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.eligibility.income import normalize_to_monthly
-from src.eligibility.ruleset import RULESET
 from src.programs.registry import get_program, get_ruleset_by_id
 from src.state.models import EligibilityCase, FieldStatus, Stage
 
@@ -21,8 +20,11 @@ class PlanResult:
 
 
 def _service_area(case: EligibilityCase) -> str:
+    slug = (case.program_slug or "").strip()
+    if not slug:
+        return "the program service area"
     try:
-        return get_program(case.program_slug or "nc-fns").service_area_name
+        return get_program(slug).service_area_name
     except Exception:
         return "the program service area"
 
@@ -107,12 +109,14 @@ def _stated_monthly(case: EligibilityCase) -> float | None:
 def _threshold(case: EligibilityCase) -> float | None:
     if not case.household_size.is_usable() or case.household_size.value is None:
         return None
-    ruleset = RULESET
-    if case.program_slug and case.ruleset_id:
-        try:
-            ruleset = get_ruleset_by_id(case.program_slug, case.ruleset_id)
-        except Exception:
-            ruleset = RULESET
+    slug = (case.program_slug or "").strip()
+    rid = (case.ruleset_id or "").strip()
+    if not slug or not rid:
+        return None
+    try:
+        ruleset = get_ruleset_by_id(slug, rid)
+    except Exception:
+        return None
     return ruleset.threshold_for_household(int(case.household_size.value))
 
 

@@ -2,19 +2,34 @@
 
 from __future__ import annotations
 
+from src.eligibility.ruleset import load_ruleset
 from src.planner.missing import determine_missing_fields
 from src.state.models import CaseField, Contradiction, EligibilityCase, FieldStatus, Stage
 
+RULESET = load_ruleset("nc-fns")
+
+
+def _case(**kwargs: object) -> EligibilityCase:
+    data = dict(
+        program_slug="nc-fns",
+        ruleset_id=RULESET.id,
+        as_of="2026-03-01",
+        ruleset_effective_from=RULESET.effective_from,
+        ruleset_effective_to=RULESET.effective_to,
+    )
+    data.update(kwargs)
+    return EligibilityCase(**data)  # type: ignore[arg-type]
+
 
 def test_starts_with_residency() -> None:
-    plan = determine_missing_fields(EligibilityCase())
+    plan = determine_missing_fields(_case())
     assert plan.missing_fields[0] == "lives_in_nc"
     assert plan.ready_to_assess is False
     assert plan.stage == Stage.INTRODUCTION
 
 
 def test_not_in_nc_ready_to_assess() -> None:
-    case = EligibilityCase(lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=False))
+    case = _case(lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=False))
     plan = determine_missing_fields(case)
     assert plan.ready_to_assess is True
     assert plan.missing_fields == []
@@ -22,7 +37,7 @@ def test_not_in_nc_ready_to_assess() -> None:
 
 
 def test_collects_household_then_income() -> None:
-    case = EligibilityCase(
+    case = _case(
         lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=True),
         turn_count=2,
     )
@@ -36,7 +51,7 @@ def test_collects_household_then_income() -> None:
 
 
 def test_asks_period_and_gross_after_amount() -> None:
-    case = EligibilityCase(
+    case = _case(
         lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=True),
         household_size=CaseField(status=FieldStatus.KNOWN, value=1),
         income_amount=CaseField(status=FieldStatus.KNOWN, value=2000.0),
@@ -48,7 +63,7 @@ def test_asks_period_and_gross_after_amount() -> None:
 
 
 def test_asks_household_vs_individual_for_multi_person() -> None:
-    case = EligibilityCase(
+    case = _case(
         lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=True),
         household_size=CaseField(status=FieldStatus.KNOWN, value=3),
         income_amount=CaseField(status=FieldStatus.KNOWN, value=2000.0),
@@ -62,7 +77,7 @@ def test_asks_household_vs_individual_for_multi_person() -> None:
 
 
 def test_skips_household_or_individual_for_single() -> None:
-    case = EligibilityCase(
+    case = _case(
         lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=True),
         household_size=CaseField(status=FieldStatus.KNOWN, value=1),
         income_amount=CaseField(status=FieldStatus.KNOWN, value=2000.0),
@@ -78,7 +93,7 @@ def test_skips_household_or_individual_for_single() -> None:
 
 def test_net_income_asks_for_approx_gross_once() -> None:
     """Take-home under the gross limit → ask for pre-tax; do not invent tax math."""
-    case = EligibilityCase(
+    case = _case(
         lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=True),
         household_size=CaseField(status=FieldStatus.KNOWN, value=1),
         income_amount=CaseField(status=FieldStatus.KNOWN, value=2000.0),
@@ -98,7 +113,7 @@ def test_net_income_asks_for_approx_gross_once() -> None:
 
 
 def test_net_income_after_gross_followup_ready_to_assess() -> None:
-    case = EligibilityCase(
+    case = _case(
         lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=True),
         household_size=CaseField(status=FieldStatus.KNOWN, value=1),
         income_amount=CaseField(status=FieldStatus.KNOWN, value=2000.0),
@@ -115,7 +130,7 @@ def test_net_income_after_gross_followup_ready_to_assess() -> None:
 
 def test_net_takehome_above_threshold_skips_gross_followup() -> None:
     """Take-home already above gross limit → assess without asking for pre-tax."""
-    case = EligibilityCase(
+    case = _case(
         lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=True),
         household_size=CaseField(status=FieldStatus.KNOWN, value=1),
         income_amount=CaseField(status=FieldStatus.KNOWN, value=9000.0),
@@ -131,7 +146,7 @@ def test_net_takehome_above_threshold_skips_gross_followup() -> None:
 
 
 def test_individual_income_asks_for_household_total() -> None:
-    case = EligibilityCase(
+    case = _case(
         lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=True),
         household_size=CaseField(status=FieldStatus.KNOWN, value=3),
         income_amount=CaseField(status=FieldStatus.KNOWN, value=1500.0),
@@ -148,7 +163,7 @@ def test_individual_income_asks_for_household_total() -> None:
 
 
 def test_individual_above_threshold_skips_household_followup() -> None:
-    case = EligibilityCase(
+    case = _case(
         lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=True),
         household_size=CaseField(status=FieldStatus.KNOWN, value=3),
         income_amount=CaseField(status=FieldStatus.KNOWN, value=9000.0),
@@ -165,7 +180,7 @@ def test_individual_above_threshold_skips_household_followup() -> None:
 
 def test_net_then_individual_followup_order() -> None:
     """Net + individual under limit: ask pre-tax first, then household total."""
-    case = EligibilityCase(
+    case = _case(
         lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=True),
         household_size=CaseField(status=FieldStatus.KNOWN, value=3),
         income_amount=CaseField(status=FieldStatus.KNOWN, value=1000.0),
@@ -186,7 +201,7 @@ def test_net_then_individual_followup_order() -> None:
 
 
 def test_uncertain_income_amount_clarifies() -> None:
-    case = EligibilityCase(
+    case = _case(
         lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=True),
         household_size=CaseField(status=FieldStatus.KNOWN, value=1),
         income_amount=CaseField(status=FieldStatus.UNCERTAIN, value=2500.0),
@@ -198,7 +213,7 @@ def test_uncertain_income_amount_clarifies() -> None:
 
 
 def test_open_contradiction_blocks_assess() -> None:
-    case = EligibilityCase(
+    case = _case(
         lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=True),
         household_size=CaseField(status=FieldStatus.CONFLICTING, value=2),
         contradictions=[
@@ -220,7 +235,7 @@ def test_open_contradiction_blocks_assess() -> None:
 
 
 def test_uncertain_field_sets_clarifying_stage() -> None:
-    case = EligibilityCase(
+    case = _case(
         lives_in_nc=CaseField(status=FieldStatus.KNOWN, value=True),
         household_size=CaseField(status=FieldStatus.UNCERTAIN, value=2),
         turn_count=2,

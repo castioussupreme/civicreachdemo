@@ -8,6 +8,7 @@ from unittest.mock import patch
 os.environ.setdefault("OPENAI_API_KEY", "test-key-not-used")
 
 from src.compose.response import compose_response
+from src.eligibility.ruleset import load_ruleset
 from src.planner.missing import PlanResult
 from src.retrieval.kb import Citation
 from src.state.models import (
@@ -21,7 +22,14 @@ from src.state.models import (
 
 
 def _case() -> EligibilityCase:
-    case = EligibilityCase()
+    rs = load_ruleset("nc-fns")
+    case = EligibilityCase(
+        program_slug="nc-fns",
+        ruleset_id=rs.id,
+        as_of="2026-03-01",
+        ruleset_effective_from=rs.effective_from,
+        ruleset_effective_to=rs.effective_to,
+    )
     case.lives_in_nc = CaseField(status=FieldStatus.KNOWN, value=True)
     case.household_size = CaseField(status=FieldStatus.KNOWN, value=2)
     case.stage = Stage.ASSESSED

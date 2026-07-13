@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from src.json_types import JsonObject, JsonValue
 from src.limits import DEFAULT_MAX_MESSAGE_CHARS
-from src.programs.registry import default_program_slug, get_program, resolve_ruleset
+from src.programs.registry import get_program, resolve_ruleset
 
 T = TypeVar("T")
 
@@ -101,15 +101,17 @@ OPENING_MESSAGE = (
 
 def fresh_case(
     *,
-    program_slug: str | None = None,
+    program_slug: str,
     ruleset_id: str | None = None,
     as_of: str | None = None,
     ruleset_effective_from: str | None = None,
     ruleset_effective_to: str | None = None,
     opening_message: str | None = None,
 ) -> EligibilityCase:
-    """New case with program binding and a friendly opening line."""
-    slug = program_slug or default_program_slug()
+    """New case with explicit program binding and a friendly opening line."""
+    slug = (program_slug or "").strip()
+    if not slug:
+        raise ValueError("program_slug is required (no default program)")
     as_of_s = as_of or date.today().isoformat()
     as_of_d = date.fromisoformat(as_of_s)
     if ruleset_id and ruleset_effective_from is not None:
@@ -144,8 +146,8 @@ class EligibilityCase(BaseModel):
     last_question: str | None = None
     last_missing_fields: list[str] = Field(default_factory=list)
 
-    # Program silo (pinned at session create)
-    program_slug: str = "nc-fns"
+    # Program silo (required; pinned at session create — never invent a default)
+    program_slug: str = ""
     ruleset_id: str = ""
     as_of: str = ""  # ISO date
     ruleset_effective_from: str | None = None

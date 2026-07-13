@@ -155,7 +155,11 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
     citations: list[Citation] = []
     policy_context = None
 
-    program_slug = case.program_slug or "nc-fns"
+    program_slug = (case.program_slug or "").strip()
+    if not program_slug:
+        raise ValueError(
+            "case.program_slug is required (create a session with an explicit program)"
+        )
     as_of = case.as_of or None
     intents = extraction.get("user_intents") or []
     if "policy_question" in intents or extraction.get("policy_question"):

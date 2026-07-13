@@ -12,7 +12,7 @@ POC NC FNS informal screening agent. Prefer small, correct changes over new infr
 
 - Policy data lives under `programs/{slug}/` (rules YAML, knowledge, smoke).
 - **`src/` is program-agnostic** infrastructure (pipeline, API, Qdrant, registry).
-- Registry: `programs/registry.yaml`. Default slug is first listed pack (`nc-fns`).
+- Registry: `programs/registry.yaml` lists enabled packs. **No default program** — session create, smoke, and retrieve all require an explicit `program_slug`.
 - Second pack `ca-calfresh` is a real public program (California CalFresh / SNAP) for multi-program scale.
 - Sessions pin `program_slug` + `ruleset_id` at create; do not switch program mid-session.
 - Qdrant: one collection; every retrieve **pre-filters** by `program_slug` (never post-filter).
@@ -22,9 +22,9 @@ POC NC FNS informal screening agent. Prefer small, correct changes over new infr
 1. Create `programs/{slug}/program.yaml` (display name, `search_aliases`, opening message).
 2. Add `rules/*.yaml` with thresholds, `effective_from` / `effective_to` (null = open-ended), `source_id`, optional `supporting_source_ids`.
 3. Add `knowledge/manifest.json` + markdown (dual-copy income table with the rules YAML).
-4. Optional `smoke/scenarios.yaml` + scripts.
+4. Optional `smoke/scenarios.yaml` (+ optional line-oriented script files).
 5. Register the slug in `programs/registry.yaml`.
-6. `make index` + `make test` (+ `make smoke --program {slug}` when live).
+6. `make index` + `make test` (+ `make smoke PROGRAM={slug}` when live).
 
 ## Dual copy of income thresholds (intentional, per pack)
 

@@ -69,8 +69,11 @@ def extract_facts(
     *,
     previous_question: str | None = None,
 ) -> ExtractionResult:
+    slug = (case.program_slug or "").strip()
     try:
-        prog = get_program(case.program_slug or "nc-fns")
+        if not slug:
+            raise ValueError("missing program")
+        prog = get_program(slug)
         service_area = prog.service_area_name
         program_name = prog.display_name
     except Exception:

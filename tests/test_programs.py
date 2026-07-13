@@ -8,15 +8,13 @@ import pytest
 from src.programs.registry import (
     ProgramNotAvailableError,
     catalog_programs,
-    default_program_slug,
     get_program,
     list_enabled_slugs,
     resolve_ruleset,
 )
 
 
-def test_default_program_is_nc_fns() -> None:
-    assert default_program_slug() == "nc-fns"
+def test_registry_lists_nc_fns() -> None:
     assert "nc-fns" in list_enabled_slugs()
 
 

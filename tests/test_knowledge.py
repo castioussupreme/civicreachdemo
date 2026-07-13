@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.eligibility.ruleset import RULESET
+from src.eligibility.ruleset import load_ruleset
 from src.programs.registry import load_all_rulesets
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +15,7 @@ KNOWLEDGE = ROOT / "programs" / "nc-fns" / "knowledge"
 def test_manifest_lists_expected_sources() -> None:
     manifest = json.loads((KNOWLEDGE / "manifest.json").read_text(encoding="utf-8"))
     ids = {s["id"] for s in manifest["sources"]}
-    assert RULESET.source_id in ids
+    assert load_ruleset("nc-fns").source_id in ids
     assert "agent-disclaimer" in ids
     assert "nc-fns-general-requirements" in ids
     assert "nc-fns-gross-income-tests" in ids

@@ -26,10 +26,12 @@ def format_assessment_card(
     citations: list[Citation] | None = None,
     effective_from: str | None = None,
     effective_to: str | None = None,
+    program_slug: str | None = None,
 ) -> str:
     """Human-facing screening card (plain language; no backend jargon)."""
     label = STATUS_LABELS.get(assessment.status, assessment.status.value)
     lines = [label, ""]
+    slug = (program_slug or "").strip()
 
     if effective_from:
         if effective_to:
@@ -72,10 +74,10 @@ def format_assessment_card(
         lines.append("")
 
     display_cites = citations
-    if display_cites is None and assessment.source_ids:
-        display_cites = public_citations_from_ids(assessment.source_ids)
+    if display_cites is None and assessment.source_ids and slug:
+        display_cites = public_citations_from_ids(assessment.source_ids, program_slug=slug)
     if display_cites:
-        cite = format_citations(display_cites)
+        cite = format_citations(display_cites, program_slug=slug or None)
         if cite:
             lines.append(cite)
             lines.append("")

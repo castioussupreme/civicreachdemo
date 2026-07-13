@@ -68,15 +68,16 @@ class AgentApiClient:
     def create_session(
         self,
         *,
-        program_slug: str | None = None,
+        program_slug: str,
         as_of: str | None = None,
     ) -> tuple[str, str, JsonObject]:
-        body: JsonObject = {}
-        if program_slug:
-            body["program_slug"] = program_slug
+        slug = (program_slug or "").strip()
+        if not slug:
+            raise AgentApiError("program_slug is required (no default program)")
+        body: JsonObject = {"program_slug": slug}
         if as_of:
             body["as_of"] = as_of
-        data = self._post_json("/api/session", json_body=body or None)
+        data = self._post_json("/api/session", json_body=body)
         sid = str(data.get("session_id") or "")
         opening = str(data.get("opening_message") or "")
         if not sid:

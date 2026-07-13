@@ -1,7 +1,7 @@
 """
-Ruleset type + default active ruleset for the default program pack.
+Ruleset type re-export + explicit pack loader (no default program).
 
-DUAL COPY (nc-fns): programs/nc-fns/rules/*.yaml ↔ programs/nc-fns/knowledge/nc-fns-income-limits.md
+DUAL COPY (nc-fns example): programs/nc-fns/rules/*.yaml ↔ knowledge income tables.
 See AGENTS.md.
 """
 
@@ -10,20 +10,14 @@ from __future__ import annotations
 from datetime import date
 
 from src.programs.models import Ruleset
-from src.programs.registry import default_program_slug, resolve_ruleset
+from src.programs.registry import resolve_ruleset
 
-# Re-export for existing imports
-__all__ = ["RULESET", "Ruleset", "active_ruleset"]
+__all__ = ["Ruleset", "load_ruleset"]
 
 
-def active_ruleset(
-    *,
-    program_slug: str | None = None,
-    as_of: date | None = None,
-) -> Ruleset:
-    slug = program_slug or default_program_slug()
+def load_ruleset(program_slug: str, as_of: date | None = None) -> Ruleset:
+    """Load the active ruleset for an explicit program slug (required)."""
+    slug = (program_slug or "").strip()
+    if not slug:
+        raise ValueError("program_slug is required (no default program)")
     return resolve_ruleset(slug, as_of)
-
-
-# Module-level default for tests and call sites that still import RULESET
-RULESET: Ruleset = active_ruleset()

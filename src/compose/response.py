@@ -10,7 +10,6 @@ from src.compose.grounding import (
     template_terminal_reply,
     validate_grounding,
 )
-from src.eligibility.ruleset import RULESET
 from src.llm.client import chat_json, chat_text
 from src.planner.missing import PlanResult
 from src.retrieval.kb import Citation, public_citation_dicts
@@ -66,9 +65,13 @@ def _friendly_outcome(status: AssessmentStatus) -> str:
     }[status]
 
 
-def _public_citation_payload(citations: list[Citation]) -> list[dict[str, str]]:
+def _public_citation_payload(
+    citations: list[Citation],
+    *,
+    program_slug: str = "",
+) -> list[dict[str, str]]:
     """Title + URL only for the model (no internal source ids)."""
-    return public_citation_dicts(citations, limit=3)
+    return public_citation_dicts(citations, limit=3, program_slug=program_slug)
 
 
 def compose_response(
@@ -159,7 +162,7 @@ def _compose_terminal(
     Validate grounding == required_facts; one repair; else template.
     """
     required = required_facts(assessment)
-    cite_payload = _public_citation_payload(citations)
+    cite_payload = _public_citation_payload(citations, program_slug=case.program_slug)
     history = [{"role": t.role, "text": t.text} for t in case.recent_turns]
 
     system = (
@@ -203,7 +206,8 @@ def _compose_terminal(
             ][:4],
             "citations": cite_payload,
             "safety_note": safety_preamble,
-            "ruleset_id": RULESET.id,
+            "ruleset_id": case.ruleset_id,
+            "program_slug": case.program_slug,
         },
         default=str,
     )
@@ -259,6 +263,7 @@ def _compose_terminal(
         citations=citations,
         include_disclaimer=include_disclaimer_hint,
         disclaimer=DISCLAIMER,
+        program_slug=case.program_slug,
     )
 
 
@@ -343,10 +348,15 @@ def _compose_intake(
             "known_facts": case.known_summary(),
             "next_question_hint": plan.next_question_hint or None,
             "screening_result": screening_payload,
-            "citations": _public_citation_payload(citations) if policy_answer_context else [],
+            "citations": (
+                _public_citation_payload(citations, program_slug=case.program_slug)
+                if policy_answer_context
+                else []
+            ),
             "policy_context": policy_answer_context,
             "safety_note": safety_preamble,
-            "ruleset_id": RULESET.id,
+            "ruleset_id": case.ruleset_id,
+            "program_slug": case.program_slug,
         },
         default=str,
     )

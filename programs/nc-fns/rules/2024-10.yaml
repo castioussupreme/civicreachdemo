@@ -9,6 +9,7 @@ supporting_source_ids:
   - nc-fns-gross-income-tests
   - agent-disclaimer
   - nc-fns-general-requirements
+  - nc-fns-overview
 description: >-
   NC FNS gross monthly income screen using the public 200% table for FFY 2025
   (Oct 1, 2024 – Sep 30, 2025). Not an official determination.

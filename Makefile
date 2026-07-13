@@ -48,10 +48,13 @@ cli: install
 	@echo "==> CLI → agent API (PUBLIC_BASE_URL from .env.runtime)…"
 	$(POETRY) run python -m src.cli
 
-# Live E2E via agent API: happy + net + individual + student + injection (stack must be up).
+# Live E2E via agent API (stack must be up). PROGRAM is required (no default).
+#   make smoke PROGRAM=nc-fns
+#   make smoke PROGRAM=ca-calfresh
 smoke: install
-	@echo "==> Smoke (multi-scenario) via agent API (stack must be up)…"
-	$(POETRY) run python -m src.smoke
+	@if [ -z "$(PROGRAM)" ]; then echo "FAIL: set PROGRAM=<slug> (e.g. make smoke PROGRAM=nc-fns)"; exit 1; fi
+	@echo "==> Smoke (multi-scenario) via agent API program=$(PROGRAM)…"
+	$(POETRY) run python -m src.smoke --program $(PROGRAM)
 
 # Re-sync knowledge embeddings into Qdrant (only changed docs re-embedded).
 index: install

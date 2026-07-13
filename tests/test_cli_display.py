@@ -26,7 +26,7 @@ def _assessment(**kwargs: object) -> Assessment:
 
 
 def test_format_assessment_card_is_user_friendly() -> None:
-    card = format_assessment_card(_assessment())
+    card = format_assessment_card(_assessment(), program_slug="nc-fns")
     assert "Likely eligible" in card
     assert "(screening)" not in card
     assert "code-owned" not in card.lower()
@@ -41,7 +41,7 @@ def test_format_assessment_card_is_user_friendly() -> None:
     assert "Normalized gross" not in card
     assert "Informal screen only" in card
     assert "County DSS decides" in card
-    # Resolves assessment.source_ids to real title + URL
+    # Resolves assessment.source_ids to real title + URL (needs program_slug)
     assert "Public sources" in card
     assert "morefood.org" in card
     assert "nc-fns-income-limits" not in card

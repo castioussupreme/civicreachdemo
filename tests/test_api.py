@@ -61,12 +61,12 @@ def test_health_lists_endpoints_and_redis() -> None:
         body = health.json()
         assert body["status"] == "ok"
         assert "openai_model" in body
+        assert "active_programs" in body
         assert body["resources"]["sessions"] == "redis"
         assert "redis_url" in body["resources"]
-        assert "session_backend" not in body
+        assert "default_program" not in body
         for key in ("health", "openapi", "programs", "chat", "create_session", "state", "reset"):
             assert key in body["endpoints"]
-        assert body["default_program"] == "nc-fns"
         assert body["active_programs"] >= 1
 
 
@@ -79,6 +79,13 @@ def test_list_programs_search() -> None:
         snap = client.get("/api/programs", params={"q": "SNAP"})
         assert snap.status_code == 200
         assert len(snap.json()) >= 1
+
+
+@pytest.mark.usefixtures("fake_session_store")
+def test_session_requires_program_slug() -> None:
+    with TestClient(app) as client:
+        bad = client.post("/api/session", json={})
+        assert bad.status_code == 422
 
 
 @pytest.mark.usefixtures("fake_session_store")
@@ -107,7 +114,7 @@ def test_create_chat_state_reset_flow() -> None:
         assert state.status_code == 200
         assert state.json()["state"]["lives_in_nc"]["value"] is True
 
-        reset = client.post(f"/api/session/{sid}/reset")
+        reset = client.post(f"/api/session/{sid}/reset", json={})
         assert reset.status_code == 200
 
         state2 = client.get(f"/api/session/{sid}/state")
@@ -115,15 +122,10 @@ def test_create_chat_state_reset_flow() -> None:
 
 
 @pytest.mark.usefixtures("fake_session_store")
-def test_chat_without_session_creates_one() -> None:
-    with (
-        patch("src.api.app.process_turn", side_effect=_fake_process),
-        TestClient(app) as client,
-    ):
+def test_chat_requires_session_id() -> None:
+    with TestClient(app) as client:
         chat = client.post("/api/chat", json={"message": "hello"})
-        assert chat.status_code == 200
-        assert chat.json()["session_id"]
-        assert chat.json()["reply"] == "echo:hello"
+        assert chat.status_code == 400
 
 
 @pytest.mark.usefixtures("fake_session_store")
@@ -132,7 +134,11 @@ def test_chat_debug_query_returns_debug() -> None:
         patch("src.api.app.process_turn", side_effect=_fake_process),
         TestClient(app) as client,
     ):
-        chat = client.post("/api/chat?debug=true", json={"message": "hi"})
+        sid = client.post("/api/session", json={"program_slug": "nc-fns"}).json()["session_id"]
+        chat = client.post(
+            "/api/chat?debug=true",
+            json={"session_id": sid, "message": "hi"},
+        )
         assert chat.status_code == 200
         assert chat.json()["debug"] == {"turn": 1}
 
@@ -143,7 +149,8 @@ def test_chat_includes_assessment_status() -> None:
         patch("src.api.app.process_turn", side_effect=_fake_process_with_assessment),
         TestClient(app) as client,
     ):
-        chat = client.post("/api/chat", json={"message": "done"})
+        sid = client.post("/api/session", json={"program_slug": "nc-fns"}).json()["session_id"]
+        chat = client.post("/api/chat", json={"session_id": sid, "message": "done"})
         assert chat.status_code == 200
         assert chat.json()["assessment_status"] == "likely_eligible"
         cites = chat.json()["citations"]
@@ -158,7 +165,8 @@ def test_chat_includes_assessment_status() -> None:
 @pytest.mark.usefixtures("fake_session_store")
 def test_chat_rejects_empty_message() -> None:
     with TestClient(app) as client:
-        bad = client.post("/api/chat", json={"message": ""})
+        sid = client.post("/api/session", json={"program_slug": "nc-fns"}).json()["session_id"]
+        bad = client.post("/api/chat", json={"session_id": sid, "message": ""})
         assert bad.status_code == 422
 
 
@@ -168,7 +176,7 @@ def test_multi_turn_session_persistence() -> None:
         patch("src.api.app.process_turn", side_effect=_fake_process),
         TestClient(app) as client,
     ):
-        sid = client.post("/api/session").json()["session_id"]
+        sid = client.post("/api/session", json={"program_slug": "nc-fns"}).json()["session_id"]
         client.post("/api/chat", json={"session_id": sid, "message": "live in NC"})
         client.post("/api/chat", json={"session_id": sid, "message": "second turn"})
         state = client.get(f"/api/session/{sid}/state").json()["state"]

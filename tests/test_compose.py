@@ -57,7 +57,7 @@ def test_append_turn_retention_cap_matches_default() -> None:
 
 
 def test_fresh_case_has_opening() -> None:
-    case = fresh_case()
+    case = fresh_case(program_slug="nc-fns")
     assert len(case.recent_turns) == 1
     assert case.recent_turns[0].role == "assistant"
     assert "household" in case.recent_turns[0].text.lower()

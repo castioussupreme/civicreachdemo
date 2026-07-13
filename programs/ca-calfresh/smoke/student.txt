@@ -1,0 +1,8 @@
+# Student under the simple gross table.
+# This pack does NOT declare student_soft_unable — unlike nc-fns, student status
+# does not force unable_to_determine when the gross table passes.
+# Flow: residency → HH size → income + student status in the income turn.
+# Expect: HH=1, $1500 gross → likely_eligible
+I live in California
+Just me in the household
+I am a full-time college student and I make $1500 a month before taxes, household total

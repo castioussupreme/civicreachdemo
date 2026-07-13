@@ -1,6 +1,7 @@
-# CalFresh happy path — planner order: residency → household → income.
-# Expect: HH=2, $3000 gross under size-2 threshold ($3,526)
+# Happy path — lines match planner order (residency → household → income).
+# Do not put "California" in the intro or extract skips the residency turn.
+# Expect: HH=2, $3000/mo gross household → likely_eligible (size-2 threshold from ruleset)
 Hi, I want a quick check on whether I might qualify for food assistance
 I live in California
-Two people buy and prepare food together
+There are two of us who buy and prepare food together
 We make $3000 a month before taxes, total for the whole household

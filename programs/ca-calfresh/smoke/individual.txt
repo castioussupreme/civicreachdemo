@@ -1,0 +1,7 @@
+# One person's income in a multi-person household under the limit.
+# Flow: residency → HH size → individual income → one-shot household-total follow-up (decline).
+# Expect: HH=3, $2000 individual, unable_to_determine
+I live in California
+Three of us buy and prepare food together
+I make $2000 a month before taxes, but that is only my income, not the whole household
+I only know my own pay, not the household total

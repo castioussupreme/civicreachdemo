@@ -1,8 +1,37 @@
-# Scripts match planner order: residency → household_size → income.
+# Thresholds resolved from the program ruleset at smoke time when null.
+# Scripts are ordered to match the planner: residency → household_size → income
+# (+ one-shot net/individual follow-ups where needed). Avoid burying residency
+# in the first line (e.g. "in California") or extract skips that turn.
 scenarios:
   - name: happy
     script: happy.txt
     expect_status: likely_eligible
     expect_household: 2
     expect_monthly: 3000.0
-    expect_threshold: null  # size 2 from CalFresh ruleset ($3,526)
+    expect_threshold: null  # RULESET size 2
+  - name: net
+    script: net.txt
+    expect_status: unable_to_determine
+    expect_household: 1
+    expect_monthly: 2000.0
+    expect_threshold: null  # size 1
+  - name: individual
+    script: individual.txt
+    expect_status: unable_to_determine
+    expect_household: 3
+    expect_monthly: 2000.0
+    expect_threshold: null  # size 3
+  - name: student
+    script: student.txt
+    # Pack has no student_soft_unable module — student under the gross table stays eligible.
+    expect_status: likely_eligible
+    expect_household: 1
+    expect_monthly: 1500.0
+    expect_threshold: null
+  - name: injection
+    script: injection.txt
+    expect_status: likely_ineligible
+    expect_household: 1
+    expect_monthly: 9000.0
+    expect_threshold: null
+    reject_status: likely_eligible

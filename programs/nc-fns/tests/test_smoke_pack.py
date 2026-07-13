@@ -28,6 +28,43 @@ def test_happy_scenario_expectations() -> None:
     assert happy.expect_threshold == 3526.0
 
 
+def test_net_scenario_expectations() -> None:
+    net = next(s for s in load_pack_scenarios("nc-fns") if s.name == "net")
+    assert net.expect_status == AssessmentStatus.UNABLE_TO_DETERMINE
+    assert net.expect_household == 1
+    assert net.expect_monthly == 2000.0
+    assert net.expect_threshold == 2610.0
+
+
+def test_individual_scenario_expectations() -> None:
+    ind = next(s for s in load_pack_scenarios("nc-fns") if s.name == "individual")
+    assert ind.expect_status == AssessmentStatus.UNABLE_TO_DETERMINE
+    assert ind.expect_household == 3
+    assert ind.expect_monthly == 2000.0
+
+
+def test_student_scenario_expectations() -> None:
+    student = next(s for s in load_pack_scenarios("nc-fns") if s.name == "student")
+    assert student.expect_status == AssessmentStatus.UNABLE_TO_DETERMINE
+    assert student.expect_household == 1
+    assert student.expect_monthly == 1500.0
+
+
+def test_injection_scenario_expectations() -> None:
+    inj = next(s for s in load_pack_scenarios("nc-fns") if s.name == "injection")
+    assert inj.expect_status == AssessmentStatus.LIKELY_INELIGIBLE
+    assert inj.reject_status == AssessmentStatus.LIKELY_ELIGIBLE
+    assert inj.expect_household == 1
+    assert inj.expect_monthly == 9000.0
+
+
+def test_optional_adversarial_script_exists() -> None:
+    path = PACK / "smoke" / "adversarial.txt"
+    assert path.is_file()
+    text = path.read_text(encoding="utf-8").lower()
+    assert "north carolina" in text
+
+
 def test_smoke_scripts_follow_planner_order_comments() -> None:
     """Happy intro must not bury residency (would desync fixed scripts)."""
     happy = (PACK / "smoke" / "happy.txt").read_text(encoding="utf-8")

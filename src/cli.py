@@ -250,17 +250,64 @@ def _print_chat_result(data: JsonObject, *, debug: bool) -> None:
     cites = _citations_from_payload(data)
     _print_assistant(reply, assessment=assessment, citations=cites)
     if debug and data.get("debug") is not None:
-        console.print(
-            Panel(
-                json.dumps(data.get("debug"), indent=2, default=str),
-                title="Debug (from API)",
-                border_style="dim",
+        dbg = data.get("debug")
+        if isinstance(dbg, dict):
+            _print_turn_debug(cast_json_object(dbg))
+        else:
+            console.print(
+                Panel(
+                    json.dumps(dbg, indent=2, default=str),
+                    title="Debug (from API)",
+                    border_style="dim",
+                )
             )
+
+
+def cast_json_object(raw: dict[str, JsonValue]) -> JsonObject:
+    return raw
+
+
+def _print_turn_debug(dbg: JsonObject) -> None:
+    """Compact live-debug panel + full JSON for deep inspection."""
+    prog = _as_object(dbg.get("program")) or {}
+    turn = _as_object(dbg.get("turn")) or {}
+    safety = _as_object(dbg.get("safety")) or {}
+    plan = _as_object(dbg.get("plan")) or {}
+    missing = plan.get("missing") if plan else dbg.get("missing")
+    if not isinstance(missing, list):
+        missing = []
+    assess = _as_object(dbg.get("assessment")) or {}
+    lines = [
+        f"program={prog.get('slug') or '?'}  ruleset={prog.get('ruleset_id') or '?'}",
+        f"turn={turn.get('count')}  stage={turn.get('stage')}  "
+        f"screening_started={turn.get('screening_started')}",
+        f"safety={safety.get('action')} / {safety.get('source')}",
+        f"missing={', '.join(str(m) for m in missing) or '—'}",
+        f"assess={assess.get('status') or '—'}",
+    ]
+    if dbg.get("stopped"):
+        lines.append(f"stopped={dbg.get('stopped')}")
+    cites_raw = dbg.get("citations")
+    if isinstance(cites_raw, list):
+        ids = [
+            str(c.get("source_id")) for c in cites_raw if isinstance(c, dict) and c.get("source_id")
+        ]
+        if ids:
+            lines.append(f"citations={', '.join(ids)}")
+    console.print(Panel("\n".join(lines), title="Turn debug", border_style="dim"))
+    console.print(
+        Panel(
+            json.dumps(dbg, indent=2, default=str),
+            title="Debug JSON",
+            border_style="dim",
         )
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="NC FNS eligibility screening agent (API client)")
+    parser = argparse.ArgumentParser(
+        description="Public benefits eligibility screening agent (API client)"
+    )
     parser.add_argument(
         "--debug",
         action="store_true",

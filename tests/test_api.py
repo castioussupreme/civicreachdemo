@@ -24,7 +24,7 @@ from src.state.models import (
 def _fake_process(message: str, case: EligibilityCase) -> TurnResult:
     case.turn_count += 1
     if "nc" in message.lower() or "north carolina" in message.lower():
-        case.lives_in_nc = CaseField(status=FieldStatus.KNOWN, value=True)
+        case.lives_in_service_area = CaseField(status=FieldStatus.KNOWN, value=True)
     return TurnResult(
         reply=f"echo:{message}",
         case=case,
@@ -36,7 +36,7 @@ def _fake_process(message: str, case: EligibilityCase) -> TurnResult:
 
 def _fake_process_with_assessment(message: str, case: EligibilityCase) -> TurnResult:
     case.turn_count += 1
-    case.lives_in_nc = CaseField(status=FieldStatus.KNOWN, value=True)
+    case.lives_in_service_area = CaseField(status=FieldStatus.KNOWN, value=True)
     assessment = Assessment(
         status=AssessmentStatus.LIKELY_ELIGIBLE,
         reasons=["test"],
@@ -112,13 +112,13 @@ def test_create_chat_state_reset_flow() -> None:
 
         state = client.get(f"/api/session/{sid}/state")
         assert state.status_code == 200
-        assert state.json()["state"]["lives_in_nc"]["value"] is True
+        assert state.json()["state"]["lives_in_service_area"]["value"] is True
 
         reset = client.post(f"/api/session/{sid}/reset", json={})
         assert reset.status_code == 200
 
         state2 = client.get(f"/api/session/{sid}/state")
-        assert "lives_in_nc" not in state2.json()["state"]
+        assert "lives_in_service_area" not in state2.json()["state"]
 
 
 @pytest.mark.usefixtures("fake_session_store")
@@ -180,7 +180,7 @@ def test_multi_turn_session_persistence() -> None:
         client.post("/api/chat", json={"session_id": sid, "message": "live in NC"})
         client.post("/api/chat", json={"session_id": sid, "message": "second turn"})
         state = client.get(f"/api/session/{sid}/state").json()["state"]
-        assert state["lives_in_nc"]["value"] is True
+        assert state["lives_in_service_area"]["value"] is True
 
 
 @pytest.mark.usefixtures("fake_session_store")

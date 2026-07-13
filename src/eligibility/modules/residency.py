@@ -33,17 +33,17 @@ class ResidencyModule:
     ) -> list[MissingItem]:
         _ = spec
         area = program.service_area_name or "the program service area"
-        if case.lives_in_nc.status == FieldStatus.UNKNOWN:
+        if case.lives_in_service_area.status == FieldStatus.UNKNOWN:
             return [
                 MissingItem(
-                    field_key="lives_in_nc",
+                    field_key="lives_in_service_area",
                     question_hint=f"Do you currently live in {area}?",
                 )
             ]
-        if case.lives_in_nc.status == FieldStatus.UNCERTAIN:
+        if case.lives_in_service_area.status == FieldStatus.UNCERTAIN:
             return [
                 MissingItem(
-                    field_key="lives_in_nc",
+                    field_key="lives_in_service_area",
                     question_hint=f"Just to confirm — do you currently live in {area}?",
                 )
             ]
@@ -68,7 +68,10 @@ class ResidencyModule:
         )
         base_sources = [s for s in (ruleset_source_id, *supporting_source_ids) if s]
 
-        if case.lives_in_nc.status == FieldStatus.KNOWN and case.lives_in_nc.value is False:
+        if (
+            case.lives_in_service_area.status == FieldStatus.KNOWN
+            and case.lives_in_service_area.value is False
+        ):
             sources = list(dict.fromkeys([*base_sources, overview] if overview else base_sources))
             return ModuleResult(
                 outcome=ModuleOutcome.FAIL,
@@ -79,7 +82,7 @@ class ResidencyModule:
                 caveats=["Other jurisdictions administer their own assistance programs."],
             )
 
-        if not case.lives_in_nc.is_usable():
+        if not case.lives_in_service_area.is_usable():
             return ModuleResult(
                 outcome=ModuleOutcome.NEED_MORE,
                 reasons=[f"{area} residency has not been confirmed."],

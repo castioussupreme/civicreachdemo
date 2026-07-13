@@ -1,11 +1,11 @@
 [tool.poetry]
-name = "nc-fns-eligibility-agent"
+name = "civicreach-eligibility-agent"
 version = "0.1.0"
 description = "POC public-benefits eligibility agent (pluggable program packs)"
 authors = ["CivicReach Demo"]
 readme = "README.md"
 packages = [{ include = "src" }]
-# Program packs (rules + knowledge) are data under programs/ and are COPYed into
+# Program packs (rules + knowledge) live under programs/ and are COPYed into
 # the Docker image separately; they are not Python packages.
 
 [tool.poetry.dependencies]
@@ -32,7 +32,7 @@ vulture = ">=2.11"
 types-pyyaml = "^6.0.12.20260518"
 
 [tool.poetry.scripts]
-fns-agent = "src.cli:main"
+eligibility-agent = "src.cli:main"
 
 [build-system]
 requires = ["poetry-core>=1.7.0"]

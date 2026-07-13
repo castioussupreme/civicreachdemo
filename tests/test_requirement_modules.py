@@ -91,11 +91,11 @@ def test_residency_only_planner_never_asks_income() -> None:
     for spec in rs.requirements:
         for item in get_module(spec.type).missing(case, spec, program=program):
             missing_keys.append(item.field_key)
-    assert missing_keys == ["lives_in_nc"]
+    assert missing_keys == ["lives_in_service_area"]
     assert "income_amount" not in missing_keys
     assert "household_size" not in missing_keys
 
-    case.lives_in_nc = _known(True)
+    case.lives_in_service_area = _known(True)
     missing_keys = []
     for spec in rs.requirements:
         for item in get_module(spec.type).missing(case, spec, program=program):
@@ -119,7 +119,7 @@ def test_residency_only_engine_eligible_without_income() -> None:
         as_of="2026-03-01",
         ruleset_effective_from=rs.effective_from,
         ruleset_effective_to=rs.effective_to,
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
     )
     # calculate_eligibility loads ruleset by id from registry — pass ruleset explicitly
     result = calculate_eligibility(case, ruleset=rs)
@@ -140,4 +140,4 @@ def test_planner_uses_declared_modules_only() -> None:
     )
     plan = determine_missing_fields(case)
     assert plan.ready_to_assess is False
-    assert "lives_in_nc" in plan.missing_fields
+    assert "lives_in_service_area" in plan.missing_fields

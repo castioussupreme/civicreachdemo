@@ -26,7 +26,7 @@ def _field_labels(case: EligibilityCase) -> dict[str, str]:
         with suppress(Exception):
             area = get_program(slug).service_area_name or area
     return {
-        "lives_in_nc": f"whether you live in {area}",
+        "lives_in_service_area": f"whether you live in {area}",
         "household_size": "household size",
         "income_amount": "income amount",
         "income_period": "how often that income is paid",
@@ -99,7 +99,7 @@ def determine_missing_fields(case: EligibilityCase) -> PlanResult:
         )
 
     # Residency hard-fail: assess without collecting further fields.
-    if case.lives_in_nc.is_usable() and case.lives_in_nc.value is False:
+    if case.lives_in_service_area.is_usable() and case.lives_in_service_area.value is False:
         return PlanResult(
             missing_fields=[],
             stage=Stage.READY_TO_ASSESS,
@@ -135,7 +135,7 @@ def determine_missing_fields(case: EligibilityCase) -> PlanResult:
                     "income_amount",
                     "income_period",
                     "household_size",
-                    "lives_in_nc",
+                    "lives_in_service_area",
                 )
                 if hasattr(case, f)
             )

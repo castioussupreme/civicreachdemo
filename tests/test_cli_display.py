@@ -40,7 +40,7 @@ def test_format_assessment_card_is_user_friendly() -> None:
     assert "public income limit" in card
     assert "Normalized gross" not in card
     assert "Informal screen only" in card
-    assert "County DSS decides" in card
+    assert "The agency decides" in card
     # Resolves assessment.source_ids to real title + URL (needs program_slug)
     assert "Public sources" in card
     assert "morefood.org" in card

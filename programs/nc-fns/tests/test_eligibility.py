@@ -34,7 +34,7 @@ def _base_case(**kwargs: object) -> EligibilityCase:
 
 def test_likely_eligible_single() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(2000.0),
     )
@@ -47,7 +47,7 @@ def test_likely_eligible_single() -> None:
 
 def test_eligible_at_exact_threshold() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(2610.0),
     )
@@ -57,7 +57,7 @@ def test_eligible_at_exact_threshold() -> None:
 
 def test_likely_ineligible_one_dollar_over() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(2610.01),
     )
@@ -67,7 +67,7 @@ def test_likely_ineligible_one_dollar_over() -> None:
 
 def test_likely_ineligible_high_income() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(5000.0),
     )
@@ -78,12 +78,12 @@ def test_likely_ineligible_high_income() -> None:
 def test_household_of_four_screen() -> None:
     thr = RULESET.threshold_for_household(4)
     under = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(4),
         normalized_gross_monthly=_known(thr - 1),
     )
     over = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(4),
         normalized_gross_monthly=_known(thr + 1),
     )
@@ -94,7 +94,7 @@ def test_household_of_four_screen() -> None:
 
 
 def test_not_in_service_area() -> None:
-    case = _base_case(lives_in_nc=_known(False))
+    case = _base_case(lives_in_service_area=_known(False))
     result = calculate_eligibility(case)
     assert result.status == AssessmentStatus.LIKELY_INELIGIBLE
     assert "nc-fns-overview" in result.source_ids
@@ -108,7 +108,7 @@ def test_missing_residency() -> None:
 
 
 def test_missing_household_size() -> None:
-    case = _base_case(lives_in_nc=_known(True))
+    case = _base_case(lives_in_service_area=_known(True))
     result = calculate_eligibility(case)
     assert result.status == AssessmentStatus.NEEDS_MORE_INFORMATION
     assert "household" in result.reasons[0].lower()
@@ -116,7 +116,7 @@ def test_missing_household_size() -> None:
 
 def test_missing_income() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(2),
     )
     result = calculate_eligibility(case)
@@ -126,7 +126,7 @@ def test_missing_income() -> None:
 
 def test_uncertain_income_amount_needs_more_info() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(1),
         income_amount=_uncertain(2500.0),
     )
@@ -137,7 +137,7 @@ def test_uncertain_income_amount_needs_more_info() -> None:
 
 def test_net_income_unable_to_determine_when_under_threshold() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(1),
         gross_or_net=_known("net"),
         normalized_gross_monthly=_uncertain(2000.0),
@@ -149,7 +149,7 @@ def test_net_income_unable_to_determine_when_under_threshold() -> None:
 
 def test_net_takehome_above_threshold_likely_ineligible() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(1),
         gross_or_net=_known("net"),
         normalized_gross_monthly=_uncertain(9000.0),
@@ -161,7 +161,7 @@ def test_net_takehome_above_threshold_likely_ineligible() -> None:
 
 def test_individual_income_multi_person_unable_when_under_threshold() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(3),
         household_or_individual=_known("individual"),
         normalized_gross_monthly=_uncertain(2000.0),
@@ -172,7 +172,7 @@ def test_individual_income_multi_person_unable_when_under_threshold() -> None:
 
 def test_individual_income_above_threshold_likely_ineligible() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(3),
         household_or_individual=_known("individual"),
         normalized_gross_monthly=_uncertain(9000.0),
@@ -183,7 +183,7 @@ def test_individual_income_above_threshold_likely_ineligible() -> None:
 
 def test_net_and_individual_above_threshold() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(4),
         gross_or_net=_known("net"),
         household_or_individual=_known("individual"),
@@ -195,7 +195,7 @@ def test_net_and_individual_above_threshold() -> None:
 
 def test_student_softens_eligible_to_unable() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(2000.0),
         is_student=_known(True),
@@ -207,7 +207,7 @@ def test_student_softens_eligible_to_unable() -> None:
 
 def test_student_ineligible_stays_ineligible() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(9000.0),
         is_student=_known(True),
@@ -219,7 +219,7 @@ def test_student_ineligible_stays_ineligible() -> None:
 
 def test_elderly_adds_caveat_not_status_change() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(2000.0),
         elderly_or_disabled_member=_known(True),
@@ -231,7 +231,7 @@ def test_elderly_adds_caveat_not_status_change() -> None:
 
 def test_assessment_always_includes_disclaimer_caveats() -> None:
     case = _base_case(
-        lives_in_nc=_known(True),
+        lives_in_service_area=_known(True),
         household_size=_known(1),
         normalized_gross_monthly=_known(2000.0),
     )

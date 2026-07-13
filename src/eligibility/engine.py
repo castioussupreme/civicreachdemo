@@ -50,8 +50,9 @@ def calculate_eligibility(
             service_area_short="this program",
         )
 
+    agency = program.apply_channel or "the agency"
     base_caveats: list[str] = [
-        "This is an informal screening only—not an official DSS determination.",
+        f"This is an informal screening only—not an official determination by {agency}.",
         (
             f"Ruleset {ruleset.id} effective from {ruleset.effective_from}"
             + (f" to {ruleset.effective_to}" if ruleset.effective_to else " (open-ended)")

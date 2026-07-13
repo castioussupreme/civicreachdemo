@@ -82,7 +82,7 @@ def format_assessment_card(
             lines.append(cite)
             lines.append("")
 
-    lines.append("Informal screen only — not an official determination. County DSS decides.")
+    lines.append("Informal screen only — not an official determination. The agency decides.")
     # Drop trailing blank lines for a tight panel
     while lines and lines[-1] == "":
         lines.pop()
@@ -115,7 +115,8 @@ def _friendly_reason(text: str) -> str:
         ("Public screening threshold", "Public income limit"),
         ("gross household monthly income", "monthly household income"),
         ("Gross household monthly income", "Monthly household income"),
-        ("DSS decides", "your county DSS decides"),
+        ("DSS decides", "the agency decides"),
+        ("county DSS", "the agency"),
     )
     for old, new in replacements:
         out = out.replace(old, new)

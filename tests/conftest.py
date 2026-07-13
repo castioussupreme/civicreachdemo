@@ -31,7 +31,7 @@ class FakeSessionStore:
         program_slug: str,
         as_of: str | None = None,
     ) -> str:
-        sid = str(uuid.uuid4())[:8]
+        sid = str(uuid.uuid4())
         self._sessions[sid] = fresh_case(program_slug=program_slug, as_of=as_of)
         return sid
 

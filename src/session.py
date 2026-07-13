@@ -61,7 +61,7 @@ class SessionStore:
     ) -> str:
         if not (program_slug or "").strip():
             raise ValueError("program_slug is required")
-        sid = str(uuid.uuid4())[:8]
+        sid = str(uuid.uuid4())
         self.set(sid, fresh_case(program_slug=program_slug, as_of=as_of))
         return sid
 

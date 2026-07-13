@@ -212,7 +212,7 @@ class GrossIncomeLimitModule:
         caveats: list[str] = []
         if stricter and stricter in supporting_source_ids:
             caveats.append(
-                "Some households may face a stricter (~130%) gross income test; only DSS "
+                "Some households may face a stricter (~130%) gross income test; only the agency "
                 "decides which test applies (this screen uses the public 200% table only)."
             )
 
@@ -373,6 +373,6 @@ def _assess_uncertain(
             f"(not confirmed full gross household income). Public gross threshold for "
             f"household of {size}: ${threshold:,.2f}. "
             f"If you know approximate before-tax total household income, we can re-run "
-            f"this simple screen; otherwise DSS can review a full application.",
+            f"this simple screen; otherwise the agency can review a full application.",
         ],
     )

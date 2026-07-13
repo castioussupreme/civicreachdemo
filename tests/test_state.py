@@ -12,14 +12,14 @@ def test_apply_income_and_normalize_monthly() -> None:
         case,
         {
             "facts": {
-                "lives_in_nc": True,
+                "lives_in_service_area": True,
                 "household_size": 2,
                 "income_amount": 2500,
                 "income_period": "monthly",
                 "gross_or_net": "gross",
                 "household_or_individual": "household",
                 "confidence": {
-                    "lives_in_nc": 0.9,
+                    "lives_in_service_area": 0.9,
                     "household_size": 0.9,
                     "income_amount": 0.9,
                     "income_period": 0.9,
@@ -290,13 +290,13 @@ def test_known_summary_serializable() -> None:
         EligibilityCase(),
         {
             "facts": {
-                "lives_in_nc": True,
+                "lives_in_service_area": True,
                 "household_size": 1,
                 "income_amount": 1500,
                 "income_period": "monthly",
                 "gross_or_net": "gross",
                 "confidence": {
-                    "lives_in_nc": 0.9,
+                    "lives_in_service_area": 0.9,
                     "household_size": 0.9,
                     "income_amount": 0.9,
                     "income_period": 0.9,
@@ -309,7 +309,7 @@ def test_known_summary_serializable() -> None:
     summary = case.known_summary()
     # Facts only — no stage labels (those are debug/API metadata)
     assert "stage" not in summary
-    assert summary["lives_in_nc"]["value"] is True  # type: ignore[index]
+    assert summary["lives_in_service_area"]["value"] is True  # type: ignore[index]
     assert summary["household_size"]["value"] == 1  # type: ignore[index]
     assert "normalized_gross_monthly" in summary
 

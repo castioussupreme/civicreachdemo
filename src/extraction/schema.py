@@ -31,8 +31,10 @@ class SafetySignal(TypedDict, total=False):
 
 
 class ExtractionFacts(TypedDict, total=False):
-    lives_in_nc: bool | None
-    lives_in_nc_raw: str
+    """Generic public-benefits slots (program packs choose which modules use them)."""
+
+    lives_in_service_area: bool | None
+    lives_in_service_area_raw: str
     household_size: int | None
     household_size_raw: str
     income_amount: float | None
@@ -130,8 +132,8 @@ def _coerce_facts(raw: object) -> ExtractionFacts:
                     confidence[key] = parsed
     facts["confidence"] = confidence
 
-    if raw.get("lives_in_nc") is not None:
-        facts["lives_in_nc"] = bool(raw["lives_in_nc"])
+    if raw.get("lives_in_service_area") is not None:
+        facts["lives_in_service_area"] = bool(raw["lives_in_service_area"])
 
     size = _as_int(raw.get("household_size"))
     if size is not None:
@@ -172,9 +174,9 @@ def _coerce_facts(raw: object) -> ExtractionFacts:
     if isinstance(confirm_value, bool | int | float | str):
         facts["confirm_value"] = confirm_value
 
-    lives_raw = raw.get("lives_in_nc_raw")
+    lives_raw = raw.get("lives_in_service_area_raw")
     if isinstance(lives_raw, str):
-        facts["lives_in_nc_raw"] = lives_raw
+        facts["lives_in_service_area_raw"] = lives_raw
     hh_raw = raw.get("household_size_raw")
     if isinstance(hh_raw, str):
         facts["household_size_raw"] = hh_raw

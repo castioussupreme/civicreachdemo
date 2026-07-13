@@ -39,7 +39,7 @@ def test_coerce_nested_facts() -> None:
     result = coerce_extraction(
         {
             "facts": {
-                "lives_in_nc": True,
+                "lives_in_service_area": True,
                 "household_size": "3",
                 "income_amount": "2500.5",
                 "income_period": "monthly",
@@ -54,7 +54,7 @@ def test_coerce_nested_facts() -> None:
         }
     )
     facts = result["facts"]
-    assert facts["lives_in_nc"] is True
+    assert facts["lives_in_service_area"] is True
     assert facts["household_size"] == 3
     assert facts["income_amount"] == 2500.5
     assert facts["income_period"] == "monthly"
@@ -65,8 +65,8 @@ def test_coerce_nested_facts() -> None:
 
 
 def test_coerce_flat_facts_object() -> None:
-    result = coerce_extraction({"lives_in_nc": 1, "household_size": 2.0})
-    assert result["facts"]["lives_in_nc"] is True
+    result = coerce_extraction({"lives_in_service_area": 1, "household_size": 2.0})
+    assert result["facts"]["lives_in_service_area"] is True
     assert result["facts"]["household_size"] == 2
     assert result["user_intents"] == ["eligibility_screening"]
 

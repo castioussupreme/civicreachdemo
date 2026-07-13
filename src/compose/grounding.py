@@ -12,6 +12,7 @@ import logging
 from dataclasses import dataclass
 from typing import Literal
 
+from src.compose.copy import resolve_program
 from src.json_types import JsonObject, JsonValue
 from src.retrieval.kb import Citation, public_citation_dicts
 from src.state.models import Assessment, AssessmentStatus
@@ -108,6 +109,17 @@ def template_terminal_reply(
     size = assessment.household_size
     monthly = assessment.normalized_gross_monthly
     threshold = assessment.threshold_used
+    prog = resolve_program(program_slug) if program_slug else None
+    agency = (prog.apply_channel if prog and prog.apply_channel else "") or "the agency"
+    next_apply = ""
+    if prog and prog.apply_label and prog.apply_url:
+        next_apply = f" Applying via {prog.apply_label} ({prog.apply_url}) or {agency} is the reliable next step."
+    elif prog and prog.apply_url:
+        next_apply = (
+            f" Applying at {prog.apply_url} or contacting {agency} is the reliable next step."
+        )
+    else:
+        next_apply = f" Contacting {agency} is the reliable next step."
 
     parts: list[str] = []
     if size is not None and monthly is not None and threshold is not None:
@@ -130,21 +142,19 @@ def template_terminal_reply(
     if assessment.status == AssessmentStatus.LIKELY_ELIGIBLE:
         parts.append(
             "On this informal public income screen, that looks like you may qualify — "
-            "only your county DSS can decide for real."
+            f"only {agency} can decide for real."
         )
     elif assessment.status == AssessmentStatus.LIKELY_INELIGIBLE:
         parts.append(
             "On this informal public income screen, that looks like you may not qualify — "
-            "only your county DSS can decide for real."
+            f"only {agency} can decide for real."
         )
     else:
         extra = ""
         if assessment.reasons:
             extra = f" {assessment.reasons[0].rstrip('.')}."
         parts.append(
-            "I can't give a confident yes or no from this simple screen."
-            + extra
-            + " Applying through ePASS or your county DSS is the reliable next step."
+            "I can't give a confident yes or no from this simple screen." + extra + next_apply
         )
 
     for c in public_citation_dicts(

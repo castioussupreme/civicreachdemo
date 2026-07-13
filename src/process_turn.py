@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 
@@ -14,7 +15,7 @@ from src.limits import (
     MESSAGE_TOO_LONG_REPLY,
 )
 from src.openai_errors import OpenAIServiceError
-from src.planner.missing import determine_missing_fields
+from src.planner.missing import PlanResult, determine_missing_fields
 from src.programs.registry import get_program
 from src.retrieval.kb import Citation, get_by_id, retrieve, retrieve_supporting_policy
 from src.safety.checks import (
@@ -26,6 +27,8 @@ from src.safety.checks import (
 )
 from src.state.models import Assessment, EligibilityCase, Stage
 from src.state.updates import apply_validated_updates
+
+logger = logging.getLogger(__name__)
 
 # Whole-message go-ahead after the scope intro (before household/income intake)
 _GO_AHEAD_RE = re.compile(
@@ -78,16 +81,19 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
     if len(message) > max_chars:
         case.append_turn("user", LONG_MESSAGE_HISTORY_PLACEHOLDER, max_chars=max_chars)
         case.append_turn("assistant", MESSAGE_TOO_LONG_REPLY, max_chars=max_chars)
+        debug = build_turn_debug(
+            case,
+            safety_action="message_too_long",
+            stopped="message_too_long",
+            message_chars=len(message),
+            max_message_chars=max_chars,
+        )
+        _log_turn(debug)
         return TurnResult(
             reply=MESSAGE_TOO_LONG_REPLY,
             case=case,
             safety_action="message_too_long",
-            debug=_debug(
-                case,
-                stopped="message_too_long",
-                message_chars=len(message),
-                max_message_chars=max_chars,
-            ),
+            debug=debug,
         )
 
     # 1) Extract first (facts + safety confidence). On LLM failure, regex-only fallback.
@@ -108,11 +114,18 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
         if safety_fb.action == SafetyAction.CRISIS:
             reply = safety_fb.user_message or ""
             case.append_turn("assistant", reply, max_chars=max_chars)
+            debug = build_turn_debug(
+                case,
+                safety_action=safety_fb.action.value,
+                stopped="crisis",
+                safety_source=safety_fb.source,
+            )
+            _log_turn(debug)
             return TurnResult(
                 reply=reply,
                 case=case,
                 safety_action=safety_fb.action.value,
-                debug=_debug(case, stopped="crisis", safety_source=safety_fb.source),
+                debug=debug,
             )
         return _openai_failure_turn(case, max_chars=max_chars, exc=exc, phase="extract")
 
@@ -131,11 +144,19 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
     if safety.action == SafetyAction.CRISIS:
         reply = safety.user_message or ""
         case.append_turn("assistant", reply, max_chars=max_chars)
+        debug = build_turn_debug(
+            case,
+            safety_action=safety.action.value,
+            stopped="crisis",
+            safety_source=safety.source,
+            extraction=_extraction_json(extraction),
+        )
+        _log_turn(debug)
         return TurnResult(
             reply=reply,
             case=case,
             safety_action=safety.action.value,
-            debug=_debug(case, stopped="crisis", safety_source=safety.source),
+            debug=debug,
         )
 
     safety_preamble: str | None = None
@@ -154,15 +175,20 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
             )
             reply = f"{notice.rstrip()} {follow}".strip()
             case.append_turn("assistant", reply, max_chars=max_chars)
+            debug = build_turn_debug(
+                case,
+                safety_action=safety.action.value,
+                stopped="application",
+                safety_source=safety.source,
+                extraction=_extraction_json(extraction),
+                plan=plan_early,
+            )
+            _log_turn(debug)
             return TurnResult(
                 reply=reply,
                 case=case,
                 safety_action=safety.action.value,
-                debug=_debug(
-                    case,
-                    stopped="application",
-                    safety_source=safety.source,
-                ),
+                debug=debug,
             )
         safety_preamble = (
             personalize_safety_notice(safety.action, program_label=program_label)
@@ -215,17 +241,20 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
         ).rstrip()
         reply = f"{notice} {follow}".strip()
         case.append_turn("assistant", reply, max_chars=max_chars)
+        debug = build_turn_debug(
+            case,
+            safety_action=safety.action.value,
+            steered=safety.action.value,
+            safety_source=safety.source,
+            extraction=_extraction_json(extraction),
+            plan=plan,
+        )
+        _log_turn(debug)
         return TurnResult(
             reply=reply,
             case=case,
             safety_action=safety.action.value,
-            debug=_debug(
-                case,
-                steered=safety.action.value,
-                safety_source=safety.source,
-                missing=list(plan.missing_fields),
-                extraction=_extraction_json(extraction),
-            ),
+            debug=debug,
         )
 
     assessment: Assessment | None = None
@@ -308,18 +337,24 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
 
     case.append_turn("assistant", reply, max_chars=max_chars)
 
+    debug = build_turn_debug(
+        case,
+        safety_action=safety.action.value,
+        safety_source=safety.source,
+        extraction=_extraction_json(extraction),
+        plan=plan,
+        assessment=assessment,
+        citations=citations,
+        post_assess=post_assess,
+    )
+    _log_turn(debug)
     return TurnResult(
         reply=reply,
         case=case,
         safety_action=safety.action.value,
         assessment=assessment,
         citations=citations,
-        debug=_debug(
-            case,
-            extraction=_extraction_json(extraction),
-            missing=list(plan.missing_fields),
-            safety_source=safety.source,
-        ),
+        debug=debug,
     )
 
 
@@ -335,7 +370,7 @@ def _extraction_has_screening_facts(extraction: ExtractionResult) -> bool:
     if not isinstance(facts, dict):
         return False
     keys = (
-        "lives_in_nc",
+        "lives_in_service_area",
         "household_size",
         "income_amount",
         "income_period",
@@ -368,37 +403,157 @@ def _openai_failure_turn(
 ) -> TurnResult:
     reply = exc.user_message
     case.append_turn("assistant", reply, max_chars=max_chars)
-    extra: JsonObject = {
-        "stopped": "service_unavailable",
-        "service_kind": exc.kind,
-        "service_phase": phase,
-    }
-    if extraction is not None:
-        extra["extraction"] = _extraction_json(extraction)
+    plan_stub: PlanResult | None = None
     if missing is not None:
-        extra["missing"] = list(missing)
+        plan_stub = PlanResult(
+            missing_fields=list(missing),
+            stage=case.stage,
+            next_question_hint=case.last_question or "",
+            ready_to_assess=False,
+            open_contradictions=[],
+        )
+    debug = build_turn_debug(
+        case,
+        safety_action="service_unavailable",
+        stopped="service_unavailable",
+        service_kind=exc.kind,
+        service_phase=phase,
+        extraction=_extraction_json(extraction) if extraction is not None else None,
+        plan=plan_stub,
+        assessment=assessment,
+        citations=citations,
+    )
+    _log_turn(debug)
     return TurnResult(
         reply=reply,
         case=case,
         safety_action="service_unavailable",
         assessment=assessment,
         citations=citations or [],
-        debug=_debug(case, **extra),
+        debug=debug,
     )
 
 
-def _debug(case: EligibilityCase, **extra: JsonValue) -> JsonObject:
+def build_turn_debug(
+    case: EligibilityCase,
+    *,
+    safety_action: str,
+    safety_source: str = "",
+    extraction: JsonValue | None = None,
+    plan: PlanResult | None = None,
+    assessment: Assessment | None = None,
+    citations: list[Citation] | None = None,
+    post_assess: bool = False,
+    stopped: str | None = None,
+    steered: str | None = None,
+    message_chars: int | None = None,
+    max_message_chars: int | None = None,
+    service_kind: str | None = None,
+    service_phase: str | None = None,
+) -> JsonObject:
+    """
+    Structured per-turn trace for live debugging (?debug=true / CLI /debug on).
+
+    Always available on TurnResult.debug; API only returns it when requested.
+    Agent process also logs a one-line summary via _log_turn.
+    """
+    assess = assessment if assessment is not None else case.assessment
+    missing_raw = list(plan.missing_fields) if plan is not None else list(case.last_missing_fields)
+    missing_jv: list[JsonValue] = [str(m) for m in missing_raw]
+    open_c: list[JsonValue] = [str(c) for c in plan.open_contradictions] if plan is not None else []
+    cite_ids = [c.source_id for c in (citations or [])]
     out: JsonObject = {
-        "stage": case.stage.value,
-        "turn_count": case.turn_count,
-        "history_turns": len(case.recent_turns),
-        "disclaimer_given": case.disclaimer_given,
+        "program": {
+            "slug": case.program_slug,
+            "ruleset_id": case.ruleset_id,
+            "as_of": case.as_of,
+            "ruleset_effective_from": case.ruleset_effective_from,
+            "ruleset_effective_to": case.ruleset_effective_to,
+        },
+        "turn": {
+            "count": case.turn_count,
+            "stage": case.stage.value,
+            "history_turns": len(case.recent_turns),
+            "screening_started": case.screening_started,
+            "post_assess": post_assess,
+        },
+        "safety": {
+            "action": safety_action,
+            "source": safety_source or "none",
+        },
+        "plan": {
+            "missing": missing_jv,
+            "ready_to_assess": bool(plan.ready_to_assess) if plan is not None else False,
+            "next_question_hint": (plan.next_question_hint if plan is not None else "")
+            or (case.last_question or ""),
+            "open_contradictions": open_c,
+        },
+        "known": case.known_summary(),
+        "flags": {
+            "scope_intro_given": case.scope_intro_given,
+            "disclaimer_given": case.disclaimer_given,
+            "next_steps_given": case.next_steps_given,
+            "pii_warned": case.pii_warned,
+            "asked_for_gross_amount": case.asked_for_gross_amount,
+            "asked_for_household_total": case.asked_for_household_total,
+            "period_notice_given": case.period_notice_given,
+        },
     }
-    if case.assessment is not None:
-        out["assessment_status"] = case.assessment.status.value
-    for key, val in extra.items():
-        out[key] = val
+    if extraction is not None:
+        out["extraction"] = extraction
+    if assess is not None:
+        reasons_jv: list[JsonValue] = [str(r) for r in assess.reasons[:5]]
+        source_ids_jv: list[JsonValue] = [str(s) for s in assess.source_ids]
+        out["assessment"] = {
+            "status": assess.status.value,
+            "threshold_used": assess.threshold_used,
+            "normalized_gross_monthly": assess.normalized_gross_monthly,
+            "household_size": assess.household_size,
+            "source_ids": source_ids_jv,
+            "reasons": reasons_jv,
+        }
+    if cite_ids:
+        cite_list: list[JsonValue] = [
+            {"source_id": c.source_id, "title": c.title} for c in (citations or [])
+        ]
+        out["citations"] = cite_list
+    if stopped:
+        out["stopped"] = stopped
+    if steered:
+        out["steered"] = steered
+    if message_chars is not None:
+        out["message_chars"] = message_chars
+    if max_message_chars is not None:
+        out["max_message_chars"] = max_message_chars
+    if service_kind is not None:
+        out["service_kind"] = service_kind
+    if service_phase is not None:
+        out["service_phase"] = service_phase
     return out
+
+
+def _log_turn(debug: JsonObject) -> None:
+    """One-line structured summary for agent Docker logs (live review)."""
+    prog = debug.get("program") if isinstance(debug.get("program"), dict) else {}
+    turn = debug.get("turn") if isinstance(debug.get("turn"), dict) else {}
+    safety = debug.get("safety") if isinstance(debug.get("safety"), dict) else {}
+    plan = debug.get("plan") if isinstance(debug.get("plan"), dict) else {}
+    assess = debug.get("assessment") if isinstance(debug.get("assessment"), dict) else {}
+    missing = plan.get("missing") if isinstance(plan, dict) else []
+    if not isinstance(missing, list):
+        missing = []
+    logger.info(
+        "turn program=%s ruleset=%s n=%s stage=%s safety=%s/%s missing=%s assess=%s stopped=%s",
+        prog.get("slug") if isinstance(prog, dict) else "",
+        prog.get("ruleset_id") if isinstance(prog, dict) else "",
+        turn.get("count") if isinstance(turn, dict) else "",
+        turn.get("stage") if isinstance(turn, dict) else "",
+        safety.get("action") if isinstance(safety, dict) else "",
+        safety.get("source") if isinstance(safety, dict) else "",
+        ",".join(str(m) for m in missing[:6]) or "-",
+        assess.get("status") if isinstance(assess, dict) else "-",
+        debug.get("stopped") or "-",
+    )
 
 
 def _extraction_json(extraction: ExtractionResult) -> JsonValue:

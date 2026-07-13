@@ -49,7 +49,7 @@ class ElderlyDisabledCaveatModule:
             return ModuleResult(
                 outcome=ModuleOutcome.PASS,
                 caveats=[
-                    "Household may include elderly or disabled members; DSS may apply "
+                    "Household may include elderly or disabled members; the agency may apply "
                     "different resource or income treatment not modeled here."
                 ],
             )

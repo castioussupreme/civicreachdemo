@@ -54,7 +54,7 @@ class StudentSoftUnableModule:
         sources = [source_id] if source_id else []
         caveats = [
             "College student rules are not fully modeled here. Students often need an "
-            "additional exemption beyond the income screen; DSS or campus outreach must decide."
+            "additional exemption beyond the income screen; the agency or campus outreach must decide."
         ]
 
         if not (case.is_student.is_usable() and case.is_student.value is True):

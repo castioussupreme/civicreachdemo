@@ -149,15 +149,25 @@ def test_template_includes_assessment_numbers() -> None:
             )
         ],
         include_disclaimer=True,
-        disclaimer="Informal only — DSS decides.",
+        disclaimer="Informal only — the agency decides.",
+        program_slug="nc-fns",
     )
     assert "$3,000" in text
     assert "$3,526" in text
     assert "2 people" in text or "household of 2" in text
     assert "may qualify" in text.lower()
     assert "https://example.com/limits" in text
-    assert "DSS decides" in text
+    assert "agency decides" in text.lower()
     assert "nc-fns-income-limits" not in text
+
+
+def test_template_uses_pack_apply_channel() -> None:
+    text = template_terminal_reply(
+        _assessment(status=AssessmentStatus.UNABLE_TO_DETERMINE),
+        include_disclaimer=False,
+        program_slug="nc-fns",
+    )
+    assert "ePASS" in text or "county DSS" in text
 
 
 def test_template_ineligible() -> None:

@@ -163,7 +163,7 @@ class EligibilityCase(BaseModel):
     period_notice_given: bool = False
 
     # Residency
-    lives_in_nc: CaseField[bool] = Field(default_factory=CaseField)
+    lives_in_service_area: CaseField[bool] = Field(default_factory=CaseField)
 
     # Household
     household_size: CaseField[int] = Field(default_factory=CaseField)
@@ -232,7 +232,7 @@ class EligibilityCase(BaseModel):
     def known_summary(self) -> JsonObject:
         """Compact view of *facts* for LLM prompts (no transcript, no stage labels)."""
         out: JsonObject = {}
-        self._put_field(out, "lives_in_nc", self.lives_in_nc)
+        self._put_field(out, "lives_in_service_area", self.lives_in_service_area)
         self._put_field(out, "household_size", self.household_size)
         self._put_field(out, "income_amount", self.income_amount)
         self._put_field(out, "income_period", self.income_period)

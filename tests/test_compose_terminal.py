@@ -30,7 +30,7 @@ def _case() -> EligibilityCase:
         ruleset_effective_from=rs.effective_from,
         ruleset_effective_to=rs.effective_to,
     )
-    case.lives_in_nc = CaseField(status=FieldStatus.KNOWN, value=True)
+    case.lives_in_service_area = CaseField(status=FieldStatus.KNOWN, value=True)
     case.household_size = CaseField(status=FieldStatus.KNOWN, value=2)
     case.stage = Stage.ASSESSED
     return case

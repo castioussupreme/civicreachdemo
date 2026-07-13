@@ -84,7 +84,7 @@ def _log_banner() -> None:
     lines = [
         "",
         "═" * 56,
-        "  NC FNS Eligibility Agent is up",
+        "  Public Benefits Eligibility Agent is up",
         "═" * 56,
         f"  API health    {base}/api/health",
         f"  OpenAPI docs  {base}/docs",
@@ -301,8 +301,11 @@ def chat(
         program_slug=program_slug,
     )
     # stage/assessment_status are for clients; reply text stays human-facing.
-    # Full plan/extract metadata only when ?debug=true.
+    # Full plan/extract/safety/program trace only when ?debug=true (CLI /debug on).
+    # Agent always logs a one-line turn summary from process_turn.
     debug_payload: dict[str, object] | None = dict(result.debug) if debug else None
+    if debug and debug_payload is not None:
+        logger.debug("chat debug session=%s payload=%s", session_id, debug_payload)
     return ChatResponse(
         session_id=session_id,
         reply=result.reply,

@@ -53,7 +53,7 @@ def test_session_uses_calfresh_sources() -> None:
     case = fresh_case(program_slug="ca-calfresh", as_of="2026-03-01")
     assert case.program_slug == "ca-calfresh"
     assert case.ruleset_id == "ca-calfresh-screening-2025-10"
-    case.lives_in_nc = _known(True)
+    case.lives_in_service_area = _known(True)
     case.household_size = _known(2)
     case.normalized_gross_monthly = _known(3000.0)
     result = calculate_eligibility(case)
@@ -65,7 +65,7 @@ def test_session_uses_calfresh_sources() -> None:
 
 def test_not_in_service_area_message() -> None:
     case = fresh_case(program_slug="ca-calfresh", as_of="2026-03-01")
-    case.lives_in_nc = _known(False)
+    case.lives_in_service_area = _known(False)
     result = calculate_eligibility(case)
     assert result.status.value == "likely_ineligible"
     assert "California" in result.reasons[0]

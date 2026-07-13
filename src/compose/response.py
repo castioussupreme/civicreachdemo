@@ -19,10 +19,22 @@ from src.state.models import Assessment, AssessmentStatus, EligibilityCase, Stag
 logger = logging.getLogger(__name__)
 
 # Soft line — only appended on a terminal screening result, and at most once per case.
+# Prefer pack apply_channel when known; fallback is generic.
 DISCLAIMER = (
     "Just a heads-up: this is an informal screen, not an official decision — "
-    "your county DSS makes the final call."
+    "the agency makes the final call."
 )
+
+
+def disclaimer_for_case(case: EligibilityCase) -> str:
+    prog = resolve_program(case.program_slug)
+    if prog is not None and prog.apply_channel:
+        return (
+            "Just a heads-up: this is an informal screen, not an official decision — "
+            f"{prog.apply_channel} makes the final call."
+        )
+    return DISCLAIMER
+
 
 # Terminal outcomes where a short disclaimer is appropriate once
 _TERMINAL_STATUSES = frozenset(
@@ -58,7 +70,7 @@ def _friendly_outcome(status: AssessmentStatus) -> str:
             "using reasons (take-home vs before-tax, one person vs whole household, student rules, "
             "etc.). Do NOT invent tax brackets, other people's income, or student exemptions. "
             "If the gross table would have passed but student status blocks confidence, say that "
-            "clearly. Suggest applying so DSS can review, or sharing the missing detail if simple."
+            "clearly. Suggest applying so the agency can review, or sharing the missing detail if simple."
         ),
         AssessmentStatus.NEEDS_MORE_INFORMATION: (
             "Do not announce a status. Just ask for the missing detail naturally."
@@ -142,8 +154,8 @@ def compose_response(
             else:
                 text = f"{pre}\n\n{text}".strip()
 
-    # Scope intro lives in the opening message (fresh_case). Only backfill if a
-    # session was created without it (legacy / partial cases).
+    # Scope intro lives in the opening message (fresh_case). Backfill only if
+    # somehow missing (e.g. tests that construct cases without fresh_case).
     if not case.scope_intro_given and case.stage != Stage.ASSESSED:
         prog = resolve_program(case.program_slug)
         if prog is not None:
@@ -152,8 +164,8 @@ def compose_response(
 
     if should_append_disclaimer(case, assessment):
         lower = text.lower()
-        if "informal" not in lower and "not an official" not in lower and "dss" not in lower:
-            text = text.rstrip() + "\n\n" + DISCLAIMER
+        if "informal" not in lower and "not an official" not in lower:
+            text = text.rstrip() + "\n\n" + disclaimer_for_case(case)
         case.disclaimer_given = True
 
     # Terminal assess: code-owned apply / agency next steps (once)
@@ -182,9 +194,11 @@ def _maybe_append_period_notice(case: EligibilityCase, text: str) -> str:
     days = (end - as_of).days
     if days < 0 or days > 30:
         return text
+    prog = resolve_program(case.program_slug)
+    agency = (prog.apply_channel if prog and prog.apply_channel else "") or "the agency"
     notice = (
         f"Note: the public income limits used here apply through {case.ruleset_effective_to}. "
-        "After that date, official limits may change — DSS uses current rules."
+        f"After that date, official limits may change — {agency} uses current rules."
     )
     case.period_notice_given = True
     if "through" in text.lower() and case.ruleset_effective_to in text:
@@ -210,8 +224,13 @@ def _compose_terminal(
     cite_payload = _public_citation_payload(citations, program_slug=case.program_slug)
     history = [{"role": t.role, "text": t.text} for t in case.recent_turns]
 
+    prog = resolve_program(case.program_slug)
+    program_label = (
+        prog.display_name if prog is not None else (case.program_slug or "public benefits")
+    )
+    agency = (prog.apply_channel if prog is not None and prog.apply_channel else "") or "the agency"
     system = (
-        "You help someone check North Carolina FNS (food assistance) eligibility.\n"
+        f"You help someone check whether they might qualify for {program_label}.\n"
         "You are not a government worker and cannot submit applications.\n"
         "\n"
         "Respond with a single JSON object only:\n"
@@ -221,11 +240,11 @@ def _compose_terminal(
         "  - Share the screening outcome in plain words (use outcome_guidance).\n"
         "  - Mention monthly income and public threshold when they appear in required_facts.\n"
         "  - Never invent dollar amounts or thresholds.\n"
-        "  - Never use internal ids (nc-fns-..., source_id, field names).\n"
+        "  - Never use internal ids (source_id, field names, ruleset ids).\n"
         "  - Citations: only title + URL from the citations list; optional "
         '"More: title — url" line.\n'
         + (
-            "  - End with a short note that this is informal and DSS decides.\n"
+            f"  - End with a short note that this is informal and {agency} decides.\n"
             if include_disclaimer_hint
             else "  - Skip long legal disclaimers (already covered or not needed).\n"
         )
@@ -307,7 +326,7 @@ def _compose_terminal(
         assessment,
         citations=citations,
         include_disclaimer=include_disclaimer_hint,
-        disclaimer=DISCLAIMER,
+        disclaimer=disclaimer_for_case(case),
         program_slug=case.program_slug,
     )
 
@@ -395,6 +414,7 @@ def _compose_intake(
         prog.display_name if prog is not None else (case.program_slug or "public benefits")
     )
     area = prog.service_area_name if prog is not None else "the program area"
+    agency = (prog.apply_channel if prog is not None and prog.apply_channel else "") or "the agency"
 
     system = (
         f"You are a friendly person helping someone check whether they might qualify for "
@@ -408,11 +428,11 @@ def _compose_intake(
         "- Never use robotic section headers, bullet status labels, or phrases like "
         '"Need more information", "Likely eligible (screening)", "Status:", '
         '"Assessment:", or "Unofficial determination".\n'
-        "- Never list internal field names (lives_in_nc, income_period, etc.).\n"
+        "- Never list internal field names (lives_in_service_area, income_period, ruleset ids).\n"
         "- Do not repeat a full legal disclaimer every turn. "
         + (
-            "On this turn only, end with one short plain-language note that this is informal "
-            "and DSS decides.\n"
+            f"On this turn only, end with one short plain-language note that this is informal "
+            f"and {agency} decides.\n"
             if include_disclaimer_hint
             else "Skip disclaimers on this turn — it was already covered or not needed yet.\n"
         )
@@ -421,7 +441,7 @@ def _compose_intake(
         "- known_facts is the source of truth. conversation_history is only for wording and continuity.\n"
         "- If history and known_facts disagree, trust known_facts.\n"
         "- Never invent dollar thresholds or rules.\n"
-        "- Never claim you filed an application or contacted DSS.\n"
+        "- Never claim you filed an application or contacted the agency.\n"
         "\n"
         "CITATIONS (when the citations list is non-empty):\n"
         "- Use only the provided title and full URL — never invent links.\n"

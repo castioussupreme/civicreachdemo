@@ -92,14 +92,14 @@ def test_daily_income_normalizes_and_assesses(
         [
             _extract(
                 {
-                    "lives_in_nc": True,
+                    "lives_in_service_area": True,
                     "household_size": 1,
                     "income_amount": 200,
                     "income_period": "daily",
                     "gross_or_net": "gross",
                     "household_or_individual": "household",
                     "confidence": {
-                        "lives_in_nc": 0.9,
+                        "lives_in_service_area": 0.9,
                         "household_size": 0.9,
                         "income_amount": 0.9,
                         "income_period": 0.9,
@@ -122,7 +122,7 @@ def test_happy_path_likely_eligible(stub_llm: Callable[[list[ExtractionResult]],
     stub_llm(
         [
             _extract({}),
-            _extract({"lives_in_nc": True, "confidence": {"lives_in_nc": 0.9}}),
+            _extract({"lives_in_service_area": True, "confidence": {"lives_in_service_area": 0.9}}),
             _extract({"household_size": 2, "confidence": {"household_size": 0.9}}),
             _extract(
                 {
@@ -168,7 +168,9 @@ def test_happy_path_likely_eligible(stub_llm: Callable[[list[ExtractionResult]],
 def test_not_in_nc_assesses_ineligible(
     stub_llm: Callable[[list[ExtractionResult]], None],
 ) -> None:
-    stub_llm([_extract({"lives_in_nc": False, "confidence": {"lives_in_nc": 0.95}})])
+    stub_llm(
+        [_extract({"lives_in_service_area": False, "confidence": {"lives_in_service_area": 0.95}})]
+    )
     result = process_turn("I do not live in North Carolina", fresh_case(program_slug="nc-fns"))
     assert result.case.assessment is not None
     assert result.case.assessment.status == AssessmentStatus.LIKELY_INELIGIBLE
@@ -179,7 +181,7 @@ def test_ambiguous_income_needs_clarification(
 ) -> None:
     stub_llm(
         [
-            _extract({"lives_in_nc": True, "confidence": {"lives_in_nc": 0.9}}),
+            _extract({"lives_in_service_area": True, "confidence": {"lives_in_service_area": 0.9}}),
             _extract({"household_size": 1, "confidence": {"household_size": 0.9}}),
             _extract({"income_amount": 2500, "confidence": {"income_amount": 0.4}}),
         ]
@@ -227,7 +229,7 @@ def test_out_of_scope_steers_back_when_llm_flags(
     result = process_turn("I need legal advice about a lawsuit", fresh_case(program_slug="nc-fns"))
     assert result.safety_action == "refuse_scope"
     assert result.debug.get("steered") == "refuse_scope"
-    assert result.debug.get("safety_source") == "llm"
+    assert result.debug.get("safety", {}).get("source") == "llm"  # type: ignore[union-attr]
     lower = result.reply.lower()
     assert "outside" in lower or "can't" in lower or "cannot" in lower
     assert any(k in lower for k in ("live", "household", "income", "north carolina", "people"))
@@ -249,7 +251,7 @@ def test_off_topic_math_steers_back_when_llm_flags(
     stub_llm([ext])
     result = process_turn("what is 10 + 2", fresh_case(program_slug="nc-fns"))
     assert result.safety_action == "steer_off_topic"
-    assert result.debug.get("safety_source") == "llm"
+    assert result.debug.get("safety", {}).get("source") == "llm"  # type: ignore[union-attr]
     lower = result.reply.lower()
     assert "not related" in lower or "can't answer" in lower or "cannot answer" in lower
     assert "12" not in result.reply
@@ -275,13 +277,13 @@ def test_application_mixed_with_eligibility_continues(
         [
             _extract(
                 {
-                    "lives_in_nc": True,
+                    "lives_in_service_area": True,
                     "household_size": 1,
                     "income_amount": 1500,
                     "income_period": "monthly",
                     "gross_or_net": "gross",
                     "confidence": {
-                        "lives_in_nc": 0.9,
+                        "lives_in_service_area": 0.9,
                         "household_size": 0.9,
                         "income_amount": 0.9,
                         "income_period": 0.9,
@@ -297,7 +299,7 @@ def test_application_mixed_with_eligibility_continues(
     )
     # Continues pipeline with preamble (does not hard-stop) when facts are present
     assert result.safety_action == "refuse_application"
-    assert result.case.lives_in_nc.value is True
+    assert result.case.lives_in_service_area.value is True
     assert result.debug.get("stopped") != "application"
 
 
@@ -306,14 +308,14 @@ def test_injection_still_works(stub_llm: Callable[[list[ExtractionResult]], None
         [
             _extract(
                 {
-                    "lives_in_nc": True,
+                    "lives_in_service_area": True,
                     "household_size": 1,
                     "income_amount": 1000,
                     "income_period": "monthly",
                     "gross_or_net": "gross",
                     "household_or_individual": "household",
                     "confidence": {
-                        "lives_in_nc": 0.9,
+                        "lives_in_service_area": 0.9,
                         "household_size": 0.9,
                         "income_amount": 0.9,
                         "income_period": 0.9,
@@ -331,7 +333,7 @@ def test_injection_still_works(stub_llm: Callable[[list[ExtractionResult]], None
     assert result.safety_action == "injection_notice"
     # Mixed with facts → continues compose (stub); notice may be in preamble of stub
     assert result.case.assessment is not None
-    assert result.case.lives_in_nc.value is True
+    assert result.case.lives_in_service_area.value is True
 
 
 def test_pure_injection_steers_with_follow_up(
@@ -350,7 +352,9 @@ def test_pure_injection_steers_with_follow_up(
 
 
 def test_ssn_redacted_path(stub_llm: Callable[[list[ExtractionResult]], None]) -> None:
-    stub_llm([_extract({"lives_in_nc": True, "confidence": {"lives_in_nc": 0.9}})])
+    stub_llm(
+        [_extract({"lives_in_service_area": True, "confidence": {"lives_in_service_area": 0.9}})]
+    )
     result = process_turn(
         "My social is 111-22-3333. I live in North Carolina.", fresh_case(program_slug="nc-fns")
     )
@@ -420,14 +424,14 @@ def test_multi_fact_one_message(stub_llm: Callable[[list[ExtractionResult]], Non
         [
             _extract(
                 {
-                    "lives_in_nc": True,
+                    "lives_in_service_area": True,
                     "household_size": 1,
                     "income_amount": 2000,
                     "income_period": "monthly",
                     "gross_or_net": "gross",
                     "household_or_individual": "household",
                     "confidence": {
-                        "lives_in_nc": 0.9,
+                        "lives_in_service_area": 0.9,
                         "household_size": 0.9,
                         "income_amount": 0.9,
                         "income_period": 0.9,
@@ -442,7 +446,7 @@ def test_multi_fact_one_message(stub_llm: Callable[[list[ExtractionResult]], Non
         "I live in NC, household of 1, gross monthly income $2000",
         fresh_case(program_slug="nc-fns"),
     )
-    assert result.case.lives_in_nc.value is True
+    assert result.case.lives_in_service_area.value is True
     assert result.case.household_size.value == 1
     assert result.case.assessment is not None
     assert result.case.assessment.status == AssessmentStatus.LIKELY_ELIGIBLE
@@ -455,14 +459,14 @@ def test_student_softens_assessment(
         [
             _extract(
                 {
-                    "lives_in_nc": True,
+                    "lives_in_service_area": True,
                     "household_size": 1,
                     "income_amount": 1500,
                     "income_period": "monthly",
                     "gross_or_net": "gross",
                     "is_student": True,
                     "confidence": {
-                        "lives_in_nc": 0.9,
+                        "lives_in_service_area": 0.9,
                         "household_size": 0.9,
                         "income_amount": 0.9,
                         "income_period": 0.9,
@@ -508,21 +512,39 @@ def test_policy_question_retrieves_context(
 
 
 def test_debug_payload_shape(stub_llm: Callable[[list[ExtractionResult]], None]) -> None:
-    stub_llm([_extract({"lives_in_nc": True, "confidence": {"lives_in_nc": 0.9}})])
+    stub_llm(
+        [_extract({"lives_in_service_area": True, "confidence": {"lives_in_service_area": 0.9}})]
+    )
     result = process_turn("I live in NC", fresh_case(program_slug="nc-fns"))
-    assert "extraction" in result.debug
-    assert "missing" in result.debug
-    assert "stage" in result.debug
-    assert "turn_count" in result.debug
-    # opening assistant + user + assistant reply
-    assert result.debug["history_turns"] == 3
+    dbg = result.debug
+    assert "extraction" in dbg
+    assert isinstance(dbg.get("program"), dict)
+    assert dbg["program"]["slug"] == "nc-fns"
+    assert dbg["program"]["ruleset_id"]
+    assert isinstance(dbg.get("turn"), dict)
+    assert dbg["turn"]["screening_started"] is True
+    assert dbg["turn"]["stage"]
+    assert dbg["turn"]["count"] == 1
+    assert dbg["turn"]["history_turns"] == 3  # opening + user + assistant
+    assert isinstance(dbg.get("safety"), dict)
+    assert dbg["safety"]["action"] == "continue"
+    assert dbg["safety"]["source"]
+    assert isinstance(dbg.get("plan"), dict)
+    assert (
+        "household_size" in dbg["plan"]["missing"]
+        or "lives_in_service_area" not in dbg["plan"]["missing"]
+    )
+    assert isinstance(dbg.get("known"), dict)
+    assert dbg["known"].get("lives_in_service_area", {}).get("value") is True  # type: ignore[union-attr]
+    assert isinstance(dbg.get("flags"), dict)
+    assert dbg["flags"]["scope_intro_given"] is True
 
 
 def test_conversation_history_grows(stub_llm: Callable[[list[ExtractionResult]], None]) -> None:
     stub_llm(
         [
             _extract({}),
-            _extract({"lives_in_nc": True, "confidence": {"lives_in_nc": 0.9}}),
+            _extract({"lives_in_service_area": True, "confidence": {"lives_in_service_area": 0.9}}),
         ]
     )
     case = fresh_case(program_slug="nc-fns")
@@ -581,14 +603,14 @@ def test_terminal_reply_includes_next_steps_once() -> None:
     """Full facts → terminal assess → ePASS next steps; follow-up stays post-assess."""
     facts = _extract(
         {
-            "lives_in_nc": True,
+            "lives_in_service_area": True,
             "household_size": 1,
             "income_amount": 2000,
             "income_period": "monthly",
             "gross_or_net": "gross",
             "household_or_individual": "household",
             "confidence": {
-                "lives_in_nc": 0.9,
+                "lives_in_service_area": 0.9,
                 "household_size": 0.9,
                 "income_amount": 0.9,
                 "income_period": 0.9,
@@ -633,12 +655,14 @@ def test_terminal_reply_includes_next_steps_once() -> None:
 def test_does_not_mutate_input_case(
     stub_llm: Callable[[list[ExtractionResult]], None],
 ) -> None:
-    stub_llm([_extract({"lives_in_nc": True, "confidence": {"lives_in_nc": 0.9}})])
+    stub_llm(
+        [_extract({"lives_in_service_area": True, "confidence": {"lives_in_service_area": 0.9}})]
+    )
     original = fresh_case(program_slug="nc-fns")
     opening_turns = list(original.recent_turns)
     result = process_turn("I live in NC", original)
-    assert original.lives_in_nc.value is None
-    assert result.case.lives_in_nc.value is True
+    assert original.lives_in_service_area.value is None
+    assert result.case.lives_in_service_area.value is True
     # Input case keeps its opening transcript only (process_turn copies)
     assert original.recent_turns == opening_turns
     assert all(t.role == "assistant" for t in original.recent_turns)

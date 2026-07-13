@@ -111,7 +111,7 @@ def test_pinned_ruleset_not_re_resolved_when_clock_moves() -> None:
     current = resolve_ruleset(case.program_slug, date(2025, 10, 15))
     assert current.id == "nc-fns-screening-2025-10"
     assert current.threshold_for_household(2) == 3526.0
-    case.lives_in_nc = _known(True)
+    case.lives_in_service_area = _known(True)
     case.household_size = _known(2)
     case.normalized_gross_monthly = _known(3450.0)
     result = calculate_eligibility(case)
@@ -122,7 +122,7 @@ def test_pinned_ruleset_not_re_resolved_when_clock_moves() -> None:
 
 def test_new_session_after_rollover_uses_new_ruleset() -> None:
     case = fresh_case(program_slug="nc-fns", as_of="2025-10-01")
-    case.lives_in_nc = _known(True)
+    case.lives_in_service_area = _known(True)
     case.household_size = _known(2)
     case.normalized_gross_monthly = _known(3450.0)
     result = calculate_eligibility(case)

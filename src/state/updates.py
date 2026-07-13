@@ -88,16 +88,16 @@ def apply_validated_updates(
     """
     facts: ExtractionFacts = extraction.get("facts") or {}
 
-    lives_in_nc = facts.get("lives_in_nc")
-    if lives_in_nc is not None:
-        lives = bool(lives_in_nc)
+    lives_in_service_area = facts.get("lives_in_service_area")
+    if lives_in_service_area is not None:
+        lives = bool(lives_in_service_area)
         _set_field(
-            case.lives_in_nc,
+            case.lives_in_service_area,
             lives,
-            raw=str(facts.get("lives_in_nc_raw") or lives),
-            confidence=_conf(facts, "lives_in_nc"),
+            raw=str(facts.get("lives_in_service_area_raw") or lives),
+            confidence=_conf(facts, "lives_in_service_area"),
             turn=turn,
-            path="lives_in_nc",
+            path="lives_in_service_area",
             case=case,
         )
 

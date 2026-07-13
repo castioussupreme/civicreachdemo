@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from enum import StrEnum
 from typing import Generic, Literal, TypeVar
 
@@ -7,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from src.json_types import JsonObject, JsonValue
 from src.limits import DEFAULT_MAX_MESSAGE_CHARS
+from src.programs.registry import default_program_slug, get_program, resolve_ruleset
 
 T = TypeVar("T")
 
@@ -90,18 +92,49 @@ class DialogueTurn(BaseModel):
 # for this POC while still bounding prompt size / Redis payload / re-injected text.
 MAX_RECENT_TURNS = 25
 
+# Fallback if program pack cannot be loaded (tests may override via fresh_case)
 OPENING_MESSAGE = (
-    "Hi — I can help with a quick check on whether you might qualify for "
-    "North Carolina food assistance (FNS/SNAP). "
+    "Hi — I can help with a quick eligibility screen. "
     "Can you start by telling me a little about your household and income?"
 )
 
 
-def fresh_case() -> EligibilityCase:
-    """New case with a friendly opening line already in the transcript."""
-    case = EligibilityCase()
-    case.append_turn("assistant", OPENING_MESSAGE)
-    case.last_question = OPENING_MESSAGE
+def fresh_case(
+    *,
+    program_slug: str | None = None,
+    ruleset_id: str | None = None,
+    as_of: str | None = None,
+    ruleset_effective_from: str | None = None,
+    ruleset_effective_to: str | None = None,
+    opening_message: str | None = None,
+) -> EligibilityCase:
+    """New case with program binding and a friendly opening line."""
+    slug = program_slug or default_program_slug()
+    as_of_s = as_of or date.today().isoformat()
+    as_of_d = date.fromisoformat(as_of_s)
+    if ruleset_id and ruleset_effective_from is not None:
+        rid = ruleset_id
+        eff_from = ruleset_effective_from
+        eff_to = ruleset_effective_to
+    else:
+        rs = resolve_ruleset(slug, as_of_d)
+        rid = rs.id
+        eff_from = rs.effective_from
+        eff_to = rs.effective_to
+    try:
+        opening = opening_message or get_program(slug).opening_message
+    except Exception:
+        opening = opening_message or OPENING_MESSAGE
+
+    case = EligibilityCase(
+        program_slug=slug,
+        ruleset_id=rid,
+        as_of=as_of_s,
+        ruleset_effective_from=eff_from,
+        ruleset_effective_to=eff_to,
+    )
+    case.append_turn("assistant", opening)
+    case.last_question = opening
     return case
 
 
@@ -110,6 +143,14 @@ class EligibilityCase(BaseModel):
     turn_count: int = 0
     last_question: str | None = None
     last_missing_fields: list[str] = Field(default_factory=list)
+
+    # Program silo (pinned at session create)
+    program_slug: str = "nc-fns"
+    ruleset_id: str = ""
+    as_of: str = ""  # ISO date
+    ruleset_effective_from: str | None = None
+    ruleset_effective_to: str | None = None  # null = open-ended
+    period_notice_given: bool = False
 
     # Residency
     lives_in_nc: CaseField[bool] = Field(default_factory=CaseField)

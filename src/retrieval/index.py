@@ -1,4 +1,4 @@
-"""Incremental knowledge index sync into Qdrant."""
+"""Incremental knowledge index sync into Qdrant (all program packs)."""
 
 from __future__ import annotations
 
@@ -8,9 +8,10 @@ from dataclasses import dataclass
 
 from src.config import get_settings
 from src.openai_errors import OpenAIServiceError, log_service_error
+from src.programs.registry import get_program, list_enabled_slugs
 from src.retrieval.chunking import chunk_markdown
 from src.retrieval.embeddings import embed_texts
-from src.retrieval.kb import SourceDoc, load_corpus
+from src.retrieval.kb import SourceDoc, clear_corpus_cache, load_corpus
 from src.retrieval.qdrant_store import (
     content_hash,
     delete_source,
@@ -30,7 +31,6 @@ class _IndexState:
     """Process-wide index status."""
 
     synced: bool = False
-    # True if last sync failed (e.g. OpenAI quota) — no vector hits; do not crash API
     degraded: bool = False
     last_error: str | None = None
 
@@ -55,87 +55,90 @@ def index_degraded_message() -> str | None:
 
 def sync_knowledge_index(*, force: bool = False) -> SyncResult:
     """
-    Ensure Qdrant reflects current knowledge/.
+    Ensure Qdrant reflects all enabled program knowledge packs.
 
     Only re-embeds documents whose content hash changed.
+    Points are tagged with program_slug for pre-filter isolation.
     """
     settings = get_settings()
     client = make_client(settings.effective_qdrant_url())
     ensure_collection(client)
+    clear_corpus_cache()
 
-    docs = load_corpus()
-    manifest_ids = {d.id for d in docs}
     skipped = 0
     reembedded = 0
     chunks_upserted = 0
+    orphans_deleted = 0
 
-    # Plan work first so we log clearly and only call OpenAI when needed.
-    to_embed: list[tuple[SourceDoc, str]] = []
-    for doc in docs:
-        digest = content_hash(doc.id, doc.text)
-        if not force and source_hash_in_store(client, doc.id, digest):
-            skipped += 1
+    for slug in list_enabled_slugs():
+        try:
+            get_program(slug)
+        except Exception:
+            logger.warning("Skipping index for missing pack %s", slug)
             continue
-        to_embed.append((doc, digest))
+        docs = load_corpus(slug)
+        manifest_ids = {d.id for d in docs}
+        to_embed: list[tuple[SourceDoc, str]] = []
+        for doc in docs:
+            digest = content_hash(doc.id, doc.text)
+            if not force and source_hash_in_store(client, doc.id, digest, program_slug=slug):
+                skipped += 1
+                continue
+            to_embed.append((doc, digest))
 
-    if not to_embed:
-        logger.info(
-            "Knowledge index already up to date (%s sources in Qdrant; no embeddings needed)",
-            skipped,
-        )
-    else:
-        logger.info(
-            "Embedding %s source(s) that changed or are missing: %s",
-            len(to_embed),
-            ", ".join(d.id for d, _ in to_embed),
-        )
-
-    for doc, digest in to_embed:
-        parts = chunk_markdown(doc.text)
-        if not parts:
-            logger.warning("No chunks for source_id=%s; skipping index", doc.id)
-            skipped += 1
-            continue
-
-        texts = [c.text for c in parts]
-        vectors = embed_texts(texts)
-        if len(vectors) != len(texts):
-            raise RuntimeError(
-                f"Embedding count mismatch for {doc.id}: {len(vectors)} vs {len(texts)}"
+        if to_embed:
+            logger.info(
+                "Embedding %s source(s) for program=%s: %s",
+                len(to_embed),
+                slug,
+                ", ".join(d.id for d, _ in to_embed),
             )
 
-        # Replace points for this source only after successful embed
-        delete_source(client, doc.id)
-        upsert_chunks(
-            client,
-            source_id=doc.id,
-            title=doc.title,
-            url=doc.url,
-            file_name=doc.file,
-            content_hash_value=digest,
-            effective_from=doc.effective_from,
-            effective_to=doc.effective_to,
-            chunks=[(c.index, c.text, vectors[i]) for i, c in enumerate(parts)],
-        )
-        reembedded += 1
-        chunks_upserted += len(parts)
-        logger.info(
-            "Re-indexed source_id=%s chunks=%s hash=%s…",
-            doc.id,
-            len(parts),
-            digest[:12],
-        )
+        for doc, digest in to_embed:
+            parts = chunk_markdown(doc.text)
+            if not parts:
+                logger.warning("No chunks for source_id=%s; skipping", doc.id)
+                skipped += 1
+                continue
+            texts = [c.text for c in parts]
+            vectors = embed_texts(texts)
+            if len(vectors) != len(texts):
+                raise RuntimeError(
+                    f"Embedding count mismatch for {doc.id}: {len(vectors)} vs {len(texts)}"
+                )
+            delete_source(client, doc.id, program_slug=slug)
+            upsert_chunks(
+                client,
+                program_slug=slug,
+                source_id=doc.id,
+                title=doc.title,
+                url=doc.url,
+                file_name=doc.file,
+                content_hash_value=digest,
+                effective_from=doc.effective_from,
+                effective_to=doc.effective_to,
+                chunks=[(c.index, c.text, vectors[i]) for i, c in enumerate(parts)],
+            )
+            reembedded += 1
+            chunks_upserted += len(parts)
+            logger.info(
+                "Re-indexed program=%s source_id=%s chunks=%s",
+                slug,
+                doc.id,
+                len(parts),
+            )
 
-    indexed = list_indexed_source_ids(client)
-    orphans = indexed - manifest_ids
-    for orphan_id in orphans:
-        delete_source(client, orphan_id)
-        logger.info("Deleted orphan source_id=%s from Qdrant", orphan_id)
+        indexed = list_indexed_source_ids(client, program_slug=slug)
+        orphans = indexed - manifest_ids
+        for orphan_id in orphans:
+            delete_source(client, orphan_id, program_slug=slug)
+            orphans_deleted += 1
+            logger.info("Deleted orphan program=%s source_id=%s", slug, orphan_id)
 
     result = SyncResult(
         skipped=skipped,
         reembedded=reembedded,
-        orphans_deleted=len(orphans),
+        orphans_deleted=orphans_deleted,
         chunks_upserted=chunks_upserted,
     )
     logger.info(
@@ -149,12 +152,6 @@ def sync_knowledge_index(*, force: bool = False) -> SyncResult:
 
 
 def ensure_index() -> SyncResult | None:
-    """
-    Run sync once per process (thread-safe).
-
-    Failures (e.g. OpenAI insufficient_quota) propagate so API/CLI startup aborts.
-    Vector RAG is required: do not start without a successful index sync.
-    """
     with _lock:
         if _IndexState.synced:
             return None
@@ -176,7 +173,6 @@ def ensure_index() -> SyncResult | None:
 
 
 def reset_index_flag() -> None:
-    """Test helper / make index: allow ensure_index to run again."""
     with _lock:
         _IndexState.synced = False
         _IndexState.degraded = False

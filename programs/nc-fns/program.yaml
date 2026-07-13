@@ -1,0 +1,14 @@
+slug: nc-fns
+display_name: "NC Food & Nutrition Services (SNAP)"
+search_aliases:
+  - FNS
+  - SNAP
+  - food stamps
+  - food assistance
+  - North Carolina SNAP
+program_effective_from: null
+program_effective_to: null
+opening_message: >-
+  Hi — I can help with a quick check on whether you might qualify for
+  North Carolina food assistance (FNS/SNAP).
+  Can you start by telling me a little about your household and income?

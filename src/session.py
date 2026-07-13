@@ -15,13 +15,24 @@ SESSION_TTL_SECONDS = 60 * 60 * 24  # 24 hours
 
 
 class SessionStoreProtocol(Protocol):
-    def create(self) -> str: ...
+    def create(
+        self,
+        *,
+        program_slug: str | None = None,
+        as_of: str | None = None,
+    ) -> str: ...
 
     def get(self, session_id: str) -> EligibilityCase: ...
 
     def set(self, session_id: str, case: EligibilityCase) -> None: ...
 
-    def reset(self, session_id: str) -> EligibilityCase: ...
+    def reset(
+        self,
+        session_id: str,
+        *,
+        program_slug: str | None = None,
+        as_of: str | None = None,
+    ) -> EligibilityCase: ...
 
 
 class SessionStore:
@@ -37,9 +48,14 @@ class SessionStore:
         self._prefix = "fns:case:"
         self._ttl_seconds = ttl_seconds
 
-    def create(self) -> str:
+    def create(
+        self,
+        *,
+        program_slug: str | None = None,
+        as_of: str | None = None,
+    ) -> str:
         sid = str(uuid.uuid4())[:8]
-        self.set(sid, fresh_case())
+        self.set(sid, fresh_case(program_slug=program_slug, as_of=as_of))
         return sid
 
     def get(self, session_id: str) -> EligibilityCase:
@@ -58,8 +74,14 @@ class SessionStore:
             ex=self._ttl_seconds,
         )
 
-    def reset(self, session_id: str) -> EligibilityCase:
-        case = fresh_case()
+    def reset(
+        self,
+        session_id: str,
+        *,
+        program_slug: str | None = None,
+        as_of: str | None = None,
+    ) -> EligibilityCase:
+        case = fresh_case(program_slug=program_slug, as_of=as_of)
         self.set(session_id, case)
         return case
 

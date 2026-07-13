@@ -20,7 +20,7 @@ Second terminal (stack stays up):
 
 ```bash
 make cli               # interactive chat
-make smoke             # live happy-path E2E
+make smoke             # live multi-scenario E2E (happy/net/individual/student/injection)
 ```
 
 | Command                 | Purpose                                              |
@@ -29,7 +29,7 @@ make smoke             # live happy-path E2E
 | `make up` / `make up-d` | Stack only (foreground / detached)                   |
 | `make down`             | Stop Compose                                         |
 | `make cli`              | Interactive CLI                                      |
-| `make smoke`            | Live happy path (OpenAI + Redis + Qdrant)            |
+| `make smoke`            | Live multi-scenario E2E (OpenAI + Redis + Qdrant)    |
 | `make index`            | Resync knowledge embeddings (unchanged docs skipped) |
 | `make test`             | Unit tests (LLM/Qdrant stubbed)                      |
 | `make lint`             | ruff + mypy + vulture                                |
@@ -44,6 +44,8 @@ make smoke             # live happy-path E2E
 | Qdrant   | `PUBLIC_QDRANT_URL` (printed on launch)                 |
 
 **Runtime path (single source of truth):** only the **agent** container runs `process_turn` (OpenAI, Redis, Qdrant, eligibility). **CLI and smoke are thin HTTP clients** against `PUBLIC_BASE_URL` (written to `.env.runtime` on stack start). They do not call the pipeline or OpenAI on the host.
+
+**Programs:** policy packs live under `programs/{slug}/` (rules YAML, knowledge, smoke). `src/` is reusable infrastructure. Sessions pin a program + ruleset at create (`GET /api/programs?q=` for discovery; CLI type-to-narrow picker). Qdrant is one collection with **mandatory `program_slug` pre-filter** on every retrieve.
 
 | Client         | Role                 | Where operator detail lands |
 | -------------- | -------------------- | --------------------------- |
@@ -120,7 +122,8 @@ message
 | OpenAI auth / quota / rate limit     | Generic client reply; full detail only in agent logs      |
 | Stack not up while running CLI/smoke | Client error: start `make up-d` / `make dev` first        |
 
-Scripts: `scripts/happy_path.txt`, `scripts/adversarial.txt`.
+Scripts: `scripts/happy_path.txt`, `scripts/smoke_*.txt`, `scripts/adversarial.txt`.
+`make smoke` runs happy + net + individual + student + injection via the agent API.
 
 ### 4. Tradeoffs
 
@@ -166,6 +169,7 @@ With LLM-assisted development, that discipline is cheap; a second runtime source
 - **Sync:** per-document content hash; skip unchanged sources; delete orphans no longer in the manifest.
 - **Query:** embed user/policy query → cosine top‑k; assessment turns prefer engine `source_ids`.
 - **Boundary:** RAG supplies snippets and citations for compose; the ruleset supplies dollar thresholds and screening status.
+- **200% vs 130%:** math uses only the public 200% table; `knowledge/nc-fns-gross-income-tests.md` grounds “which test?” answers without a second dollar schedule.
 
 ---
 
@@ -198,12 +202,14 @@ src/
   api/              FastAPI (sole production entry to process_turn)
   api_client.py     shared HTTP client
   cli.py            interactive client (no host pipeline)
-  smoke.py          live happy-path via API
-knowledge/          curated policy markdown + manifest
-AGENTS.md           coding-agent rules (incl. keep ruleset ↔ income table in sync)
+  smoke.py          live multi-scenario API smoke
+programs/
+  registry.yaml     enabled slugs
+  nc-fns/           rules YAML, knowledge/, smoke/
+AGENTS.md           coding-agent rules (program packs + dual-copy)
 ```
 
-Ruleset `nc-fns-screening-2025-10` — same FY 2026 gross table in `src/eligibility/ruleset.py` and `knowledge/nc-fns-income-limits.md` (see dual-copy note above).
+Ruleset `nc-fns-screening-2025-10` — FY table in `programs/nc-fns/rules/2025-10.yaml` dual-copied with `programs/nc-fns/knowledge/nc-fns-income-limits.md`.
 
 ---
 
@@ -239,3 +245,67 @@ Prefer honest **unable to determine** / **need more information** over a confide
 ## License / disclaimer
 
 Informal educational POC. Sources attributed in `knowledge/manifest.json`. Not affiliated with NCDHHS or DSS.
+
+## What would make this scope better
+
+Prioritized for review-meeting impact: correctness → UX → performance, still inside the same product.
+
+Correctness (highest leverage)
+
+┌─────────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────────────┐
+│ Improvement │ Why │
+├─────────────────────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────┤
+│ Short 130% / “which test?” KB note │ Stops invention when users push on caveats │
+├─────────────────────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────┤
+│ Effective-period awareness in replies when near FY rollover │ Table is dated Oct 2025–Sep 2026 │
+└─────────────────────────────────────────────────────────────────────────────────┴────────────────────────────────────────────────┘
+
+User experience (same scope)
+
+┌────────────────────────────────────────────────────────────────────────────────────┬─────────────────────────────────────────────┐
+│ Improvement │ Why │
+├────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+│ Progress / known facts in plain language (“I have NC + household of 5; next is │ Multi-turn state becomes visible │
+│ income”) │ │
+├────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+│ One clear question per turn (already mostly true—tighten compose prompt) │ Less interview fatigue │
+├────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+│ After terminal assess: offer next steps (ePASS/DSS) without re-running the │ Closes the loop the apply doc already │
+│ interview │ supports │
+├────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+│ Contradiction repair that restates both values simply │ Messy input is a scored axis │
+├────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+│ CLI: less backend residue (you started this with the card) │ Reviewers are residents, not operators │
+├────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+│ Optional short “what this screen covers / doesn’t” on first turn │ Sets expectations; reduces over-trust │
+└────────────────────────────────────────────────────────────────────────────────────┴─────────────────────────────────────────────┘
+
+Performance (only where it matters)
+
+┌─────────────────────────────────────────────┬────────────────────────────────────────────────────────────────────────────────────┐
+│ Improvement │ Why │
+├─────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ Two LLM calls/turn (extract + compose) is │ Biggest win: merge carefully or skip compose when safety early-exits (already) and │
+│ the main cost/latency │ when a templated terminal card is enough │
+├─────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ Retrieve only when useful (policy Q, │ Avoid embed+Qdrant every turn if not already gated │
+│ assess, student) │ │
+├─────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ Cache embeddings for repeated policy │ Cheap │
+│ queries in a session │ │
+├─────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ Don’t re-index on every discussion of code │ Incremental index is already good │
+├─────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ Redis/Qdrant local Compose │ Fine for POC; not a bottleneck vs OpenAI │
+└─────────────────────────────────────────────┴────────────────────────────────────────────────────────────────────────────────────┘
+
+Avoid “performance” work that doesn’t change demo feel (extra vector DBs, re-rankers, browser UI).
+
+Guardrails / failure modes (polish, not expand)
+
+• Ambiguous “about $2,500” — already a design focus; worth a dedicated golden path in scripts.
+• Injection — keep code ownership of eligibility; maybe one more adversarial line in adversarial.txt.
+• PII — SSN/address handled; watch for phone/email if users dump contact info.
+• Crisis — 988/911 path exists; keep it short and non-eligibility-continuing.
+
+───

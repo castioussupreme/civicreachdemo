@@ -1,0 +1,18 @@
+# Dual copy with programs/nc-fns/knowledge/nc-fns-income-limits.md — see AGENTS.md
+id: nc-fns-screening-2025-10
+effective_from: "2025-10-01"
+effective_to: "2026-09-30"
+source_id: nc-fns-income-limits
+description: >-
+  Simplified NC FNS gross monthly income screen using the public 200% table.
+  Not an official determination; DSS may apply a 130% test or other rules.
+max_gross_monthly_by_size:
+  1: 2610.0
+  2: 3526.0
+  3: 4442.0
+  4: 5360.0
+  5: 6276.0
+  6: 7194.0
+  7: 8112.0
+  8: 9030.0
+additional_member_increment: 918.0

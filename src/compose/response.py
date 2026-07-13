@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import date
 
 from src.compose.grounding import (
     parse_compose_json,
@@ -114,7 +115,33 @@ def compose_response(
             text = text.rstrip() + "\n\n" + DISCLAIMER
         case.disclaimer_given = True
 
+    # Near FY end: one plain-language period notice (only when effective_to is set)
+    text = _maybe_append_period_notice(case, text)
+
     return text
+
+
+def _maybe_append_period_notice(case: EligibilityCase, text: str) -> str:
+    if case.period_notice_given:
+        return text
+    if not case.ruleset_effective_to or not case.as_of:
+        return text
+    try:
+        as_of = date.fromisoformat(case.as_of)
+        end = date.fromisoformat(case.ruleset_effective_to)
+    except ValueError:
+        return text
+    days = (end - as_of).days
+    if days < 0 or days > 30:
+        return text
+    notice = (
+        f"Note: the public income limits used here apply through {case.ruleset_effective_to}. "
+        "After that date, official limits may change — DSS uses current rules."
+    )
+    case.period_notice_given = True
+    if "through" in text.lower() and case.ruleset_effective_to in text:
+        return text
+    return text.rstrip() + "\n\n" + notice
 
 
 def _compose_terminal(

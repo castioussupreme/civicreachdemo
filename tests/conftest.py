@@ -24,9 +24,14 @@ class FakeSessionStore:
     def __init__(self) -> None:
         self._sessions: dict[str, EligibilityCase] = {}
 
-    def create(self) -> str:
+    def create(
+        self,
+        *,
+        program_slug: str | None = None,
+        as_of: str | None = None,
+    ) -> str:
         sid = str(uuid.uuid4())[:8]
-        self._sessions[sid] = fresh_case()
+        self._sessions[sid] = fresh_case(program_slug=program_slug, as_of=as_of)
         return sid
 
     def get(self, session_id: str) -> EligibilityCase:
@@ -37,8 +42,14 @@ class FakeSessionStore:
     def set(self, session_id: str, case: EligibilityCase) -> None:
         self._sessions[session_id] = case
 
-    def reset(self, session_id: str) -> EligibilityCase:
-        case = fresh_case()
+    def reset(
+        self,
+        session_id: str,
+        *,
+        program_slug: str | None = None,
+        as_of: str | None = None,
+    ) -> EligibilityCase:
+        case = fresh_case(program_slug=program_slug, as_of=as_of)
         self._sessions[session_id] = case
         return case
 

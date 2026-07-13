@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from src.config import get_settings
+from src.programs.registry import default_program_slug
 from src.retrieval.embeddings import embed_query
 from src.retrieval.index import ensure_index, vector_index_ready
 from src.retrieval.kb import Citation, enrich_citation
@@ -16,16 +17,17 @@ logger = logging.getLogger(__name__)
 def retrieve(
     query: str,
     *,
+    program_slug: str | None = None,
     source_ids: list[str] | None = None,
     limit: int = 3,
 ) -> list[Citation]:
     """
-    Semantic search over the curated KB in Qdrant.
+    Semantic search over one program silo only (mandatory program_slug pre-filter).
 
-    When source_ids is set (assessment grounding), prefer those sources first.
-    If the vector index is not ready (e.g. embed quota on startup), returns [].
-    Screening still works; compose just has less policy grounding.
+    When source_ids is set (assessment grounding), prefer those sources first
+    still within the same program_slug.
     """
+    slug = (program_slug or "").strip() or default_program_slug()
     ensure_index()
     if not vector_index_ready():
         logger.debug("Vector index not ready — retrieve returns no citations")
@@ -33,13 +35,14 @@ def retrieve(
 
     settings = get_settings()
     top_k = limit if limit > 0 else settings.retrieval_top_k
-    q = query.strip() or "NC FNS eligibility income household"
-    return _vector_retrieve(q, source_ids=source_ids, limit=top_k)
+    q = query.strip() or "eligibility income household"
+    return _vector_retrieve(q, program_slug=slug, source_ids=source_ids, limit=top_k)
 
 
 def _vector_retrieve(
     query: str,
     *,
+    program_slug: str,
     source_ids: list[str] | None,
     limit: int,
 ) -> list[Citation]:
@@ -56,10 +59,23 @@ def _vector_retrieve(
     hits: list[StoredChunk] = []
     try:
         if source_ids:
-            preferred = search(client, vector, limit=limit, source_ids=source_ids)
+            preferred = search(
+                client,
+                vector,
+                program_slug=program_slug,
+                limit=limit,
+                source_ids=source_ids,
+            )
             hits.extend(preferred)
+            # Fill remaining only within the same program (never unfiltered)
             if len(hits) < limit:
-                rest = search(client, vector, limit=limit * 2, source_ids=None)
+                rest = search(
+                    client,
+                    vector,
+                    program_slug=program_slug,
+                    limit=limit * 2,
+                    source_ids=None,
+                )
                 seen = {h.source_id for h in hits}
                 for h in rest:
                     if h.source_id in seen:
@@ -69,7 +85,13 @@ def _vector_retrieve(
                     if len(hits) >= limit:
                         break
         else:
-            hits = search(client, vector, limit=limit * 2, source_ids=None)
+            hits = search(
+                client,
+                vector,
+                program_slug=program_slug,
+                limit=limit * 2,
+                source_ids=None,
+            )
     except Exception:
         logger.exception("Qdrant search failed")
         return []
@@ -102,8 +124,9 @@ def _vector_retrieve(
             snippet=snippet,
             effective_from=h.effective_from,
             effective_to=h.effective_to,
+            program_slug=program_slug,
         )
-        citations.append(enrich_citation(raw))
+        citations.append(enrich_citation(raw, program_slug=program_slug))
     return citations
 
 
@@ -112,9 +135,11 @@ def retrieve_supporting_policy(
     *,
     user_query: str = "",
     limit: int = 3,
+    program_slug: str | None = None,
 ) -> list[Citation]:
     return retrieve(
-        user_query or "eligibility income household NC FNS",
+        user_query or "eligibility income household",
+        program_slug=program_slug,
         source_ids=assessment_source_ids,
         limit=limit,
     )

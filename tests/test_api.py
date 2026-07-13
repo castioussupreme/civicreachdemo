@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 from src.api.app import app
 from src.process_turn import TurnResult
 from src.state.models import (
-    OPENING_MESSAGE,
     Assessment,
     AssessmentStatus,
     CaseField,
@@ -65,8 +64,21 @@ def test_health_lists_endpoints_and_redis() -> None:
         assert body["resources"]["sessions"] == "redis"
         assert "redis_url" in body["resources"]
         assert "session_backend" not in body
-        for key in ("health", "openapi", "chat", "create_session", "state", "reset"):
+        for key in ("health", "openapi", "programs", "chat", "create_session", "state", "reset"):
             assert key in body["endpoints"]
+        assert body["default_program"] == "nc-fns"
+        assert body["active_programs"] >= 1
+
+
+@pytest.mark.usefixtures("fake_session_store")
+def test_list_programs_search() -> None:
+    with TestClient(app) as client:
+        all_p = client.get("/api/programs")
+        assert all_p.status_code == 200
+        assert any(p["slug"] == "nc-fns" for p in all_p.json())
+        snap = client.get("/api/programs", params={"q": "SNAP"})
+        assert snap.status_code == 200
+        assert len(snap.json()) >= 1
 
 
 @pytest.mark.usefixtures("fake_session_store")
@@ -75,10 +87,12 @@ def test_create_chat_state_reset_flow() -> None:
         patch("src.api.app.process_turn", side_effect=_fake_process),
         TestClient(app) as client,
     ):
-        created = client.post("/api/session")
+        created = client.post("/api/session", json={"program_slug": "nc-fns"})
         assert created.status_code == 200
         sid = created.json()["session_id"]
-        assert created.json()["opening_message"] == OPENING_MESSAGE
+        assert created.json()["opening_message"]
+        assert created.json()["program_slug"] == "nc-fns"
+        assert created.json()["ruleset_id"]
 
         chat = client.post(
             "/api/chat",

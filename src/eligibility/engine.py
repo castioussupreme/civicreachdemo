@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.eligibility.ruleset import RULESET, Ruleset
+from src.programs.registry import get_ruleset_by_id
 from src.state.models import (
     Assessment,
     AssessmentStatus,
@@ -9,14 +10,26 @@ from src.state.models import (
 )
 
 
+def _ruleset_for_case(case: EligibilityCase, ruleset: Ruleset | None) -> Ruleset:
+    if ruleset is not None:
+        return ruleset
+    if case.program_slug and case.ruleset_id:
+        try:
+            return get_ruleset_by_id(case.program_slug, case.ruleset_id)
+        except Exception:
+            pass
+    return RULESET
+
+
 def calculate_eligibility(
     case: EligibilityCase,
-    ruleset: Ruleset = RULESET,
+    ruleset: Ruleset | None = None,
 ) -> Assessment:
     """
     Deterministic screening assessment.
-    Pure function of case state + versioned ruleset.
+    Pure function of case state + versioned ruleset (pinned on the case when set).
     """
+    ruleset = _ruleset_for_case(case, ruleset)
     source_ids = [
         ruleset.source_id,
         "nc-fns-gross-income-tests",
@@ -25,7 +38,11 @@ def calculate_eligibility(
     ]
     caveats: list[str] = [
         "This is an informal screening only—not an official DSS determination.",
-        (f"Ruleset {ruleset.id} effective {ruleset.effective_from} to {ruleset.effective_to}."),
+        (
+            f"Ruleset {ruleset.id} effective from {ruleset.effective_from}"
+            + (f" to {ruleset.effective_to}" if ruleset.effective_to else " (open-ended)")
+            + "."
+        ),
         "Some households may face a stricter (~130%) gross income test; only DSS "
         "decides which test applies (this screen uses the public 200% table only).",
     ]

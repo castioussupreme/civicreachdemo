@@ -13,7 +13,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from src.limits import DEFAULT_MAX_MESSAGE_CHARS, HARD_MAX_MESSAGE_CHARS
 
 ROOT = Path(__file__).resolve().parents[1]
-KNOWLEDGE_DIR = ROOT / "knowledge"
+PROGRAMS_DIR = ROOT / "programs"
+# Default pack knowledge (nc-fns); prefer programs.registry + pack.knowledge_dir
+KNOWLEDGE_DIR = PROGRAMS_DIR / "nc-fns" / "knowledge"
 
 load_dotenv(ROOT / ".env")
 # Prefer runtime ports/URLs written by make dev / start.py when present.

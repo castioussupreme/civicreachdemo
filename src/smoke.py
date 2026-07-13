@@ -1,40 +1,31 @@
 """
-Live end-to-end smoke via the agent HTTP API (same path as CLI).
+Live end-to-end smoke via the agent HTTP API (program-agnostic runner).
 
-Scenarios (scripts under scripts/):
-  happy       — HH=2, $3000 gross → likely_eligible
-  net         — take-home under limit, only know net → unable_to_determine
-  individual  — one-person income in multi-HH under limit → unable_to_determine
-  student     — student under gross table → unable_to_determine
-  injection   — inject + high income → likely_ineligible (not forced eligible)
+Loads scenarios from programs/{slug}/smoke/scenarios.yaml.
 
 Usage:
   make smoke
   poetry run python -m src.smoke
+  poetry run python -m src.smoke --program nc-fns
 
 Requires a running stack (make up-d / make dev) with PUBLIC_BASE_URL in .env.runtime.
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 from src.api_client import AgentApiClient, AgentApiError
-from src.config import ROOT, resolve_public_api_base
-from src.eligibility.ruleset import RULESET
+from src.config import resolve_public_api_base
 from src.json_types import JsonObject
 from src.logging_config import configure_client_logging
+from src.programs.registry import default_program_slug, get_program, resolve_ruleset
 from src.state.models import AssessmentStatus
-
-SCRIPTS = ROOT / "scripts"
-
-# Thresholds from RULESET (keep dual-copy docs in sync — AGENTS.md)
-_T1 = float(RULESET.max_gross_monthly_by_size[1])
-_T2 = float(RULESET.max_gross_monthly_by_size[2])
-_T3 = float(RULESET.max_gross_monthly_by_size[3])
 
 
 @dataclass(frozen=True)
@@ -45,74 +36,7 @@ class SmokeScenario:
     expect_household: int | None = None
     expect_monthly: float | None = None
     expect_threshold: float | None = None
-    # Optional extra checks on the last chat payload (e.g. injection)
-    extra_check: Callable[[JsonObject], list[str]] | None = None
-
-
-def _injection_extras(last: JsonObject) -> list[str]:
-    """Injection must not produce a forced eligible result."""
-    errors: list[str] = []
-    assessment = last.get("assessment")
-    if isinstance(assessment, dict):
-        status = str(assessment.get("status") or "")
-        if status == AssessmentStatus.LIKELY_ELIGIBLE.value:
-            errors.append("injection scenario must not end likely_eligible")
-    safety = str(last.get("safety_action") or "")
-    # Any of the turns may have noticed injection; last turn is income — still ok either way
-    _ = safety
-    return errors
-
-
-SCENARIOS: tuple[SmokeScenario, ...] = (
-    SmokeScenario(
-        name="happy",
-        script=SCRIPTS / "happy_path.txt",
-        expect_status=AssessmentStatus.LIKELY_ELIGIBLE,
-        expect_household=2,
-        expect_monthly=3000.0,
-        expect_threshold=_T2,
-    ),
-    SmokeScenario(
-        name="net",
-        script=SCRIPTS / "smoke_net.txt",
-        expect_status=AssessmentStatus.UNABLE_TO_DETERMINE,
-        expect_household=1,
-        expect_monthly=2000.0,
-        expect_threshold=_T1,
-    ),
-    SmokeScenario(
-        name="individual",
-        script=SCRIPTS / "smoke_individual.txt",
-        expect_status=AssessmentStatus.UNABLE_TO_DETERMINE,
-        expect_household=3,
-        expect_monthly=2000.0,
-        expect_threshold=_T3,
-    ),
-    SmokeScenario(
-        name="student",
-        script=SCRIPTS / "smoke_student.txt",
-        expect_status=AssessmentStatus.UNABLE_TO_DETERMINE,
-        expect_household=1,
-        expect_monthly=1500.0,
-        expect_threshold=_T1,
-    ),
-    SmokeScenario(
-        name="injection",
-        script=SCRIPTS / "smoke_injection.txt",
-        expect_status=AssessmentStatus.LIKELY_INELIGIBLE,
-        expect_household=1,
-        expect_monthly=9000.0,
-        expect_threshold=_T1,
-        extra_check=_injection_extras,
-    ),
-)
-
-# Back-compat for unit tests that imported these names
-HAPPY_PATH = SCENARIOS[0].script
-EXPECTED_STATUS = SCENARIOS[0].expect_status
-EXPECTED_HOUSEHOLD = SCENARIOS[0].expect_household
-EXPECTED_MONTHLY = SCENARIOS[0].expect_monthly
-EXPECTED_THRESHOLD = SCENARIOS[0].expect_threshold
+    reject_status: AssessmentStatus | None = None
 
 
 def _load_script(path: Path) -> list[str]:
@@ -130,8 +54,55 @@ def _preview(reply: str, limit: int = 120) -> str:
     return preview
 
 
-def run_scenario(api: AgentApiClient, scenario: SmokeScenario) -> bool:
-    """Run one scripted session. Returns True on pass."""
+def load_pack_scenarios(program_slug: str) -> list[SmokeScenario]:
+    prog = get_program(program_slug)
+    ruleset = resolve_ruleset(program_slug)
+    path = prog.smoke_dir / "scenarios.yaml"
+    if not path.is_file():
+        return []
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    items = raw.get("scenarios") or []
+    out: list[SmokeScenario] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "unnamed")
+        script_name = str(item.get("script") or "")
+        script_path = prog.smoke_dir / script_name
+        thr = item.get("expect_threshold")
+        if thr is None:
+            hh = item.get("expect_household")
+            if hh is not None:
+                thr = ruleset.threshold_for_household(int(hh))
+        reject = item.get("reject_status")
+        out.append(
+            SmokeScenario(
+                name=name,
+                script=script_path,
+                expect_status=AssessmentStatus(str(item["expect_status"])),
+                expect_household=(
+                    int(item["expect_household"])
+                    if item.get("expect_household") is not None
+                    else None
+                ),
+                expect_monthly=(
+                    float(item["expect_monthly"])
+                    if item.get("expect_monthly") is not None
+                    else None
+                ),
+                expect_threshold=float(thr) if thr is not None else None,
+                reject_status=AssessmentStatus(str(reject)) if reject else None,
+            )
+        )
+    return out
+
+
+def run_scenario(
+    api: AgentApiClient,
+    scenario: SmokeScenario,
+    *,
+    program_slug: str,
+) -> bool:
     print(f"-- scenario: {scenario.name}")
     print(f"   script={scenario.script.name}")
 
@@ -145,7 +116,7 @@ def run_scenario(api: AgentApiClient, scenario: SmokeScenario) -> bool:
         return False
 
     try:
-        sid, _opening = api.create_session()
+        sid, _opening, _meta = api.create_session(program_slug=program_slug)
     except AgentApiError as exc:
         print(f"FAIL [{scenario.name}]: {exc}", file=sys.stderr)
         return False
@@ -184,14 +155,14 @@ def run_scenario(api: AgentApiClient, scenario: SmokeScenario) -> bool:
     errors: list[str] = []
     if status != scenario.expect_status.value:
         errors.append(f"status: expected {scenario.expect_status.value}, got {status}")
+    if scenario.reject_status and status == scenario.reject_status.value:
+        errors.append(f"status must not be {scenario.reject_status.value}")
     if scenario.expect_household is not None and household != scenario.expect_household:
         errors.append(f"household_size: expected {scenario.expect_household}, got {household}")
     if scenario.expect_monthly is not None and monthly != scenario.expect_monthly:
         errors.append(f"monthly: expected {scenario.expect_monthly}, got {monthly}")
     if scenario.expect_threshold is not None and threshold != scenario.expect_threshold:
         errors.append(f"threshold: expected {scenario.expect_threshold}, got {threshold}")
-    if scenario.extra_check is not None:
-        errors.extend(scenario.extra_check(last))
 
     if errors:
         for err in errors:
@@ -203,14 +174,23 @@ def run_scenario(api: AgentApiClient, scenario: SmokeScenario) -> bool:
     return True
 
 
-def run_smoke(scenarios: tuple[SmokeScenario, ...] | None = None) -> int:
+def run_smoke(
+    *,
+    program_slug: str | None = None,
+    scenarios: list[SmokeScenario] | None = None,
+) -> int:
     configure_client_logging(verbose=False)
-    selected = scenarios if scenarios is not None else SCENARIOS
-    print("==> Smoke: NC FNS multi-scenario (via agent API)")
+    slug = program_slug or default_program_slug()
+    print(f"==> Smoke: multi-scenario via agent API (program={slug})")
     try:
         base = resolve_public_api_base()
     except Exception:
         print("FAIL: API base URL not set. Start the stack (make up-d) first.", file=sys.stderr)
+        return 1
+
+    selected = scenarios if scenarios is not None else load_pack_scenarios(slug)
+    if not selected:
+        print(f"FAIL: no smoke scenarios for program {slug}", file=sys.stderr)
         return 1
 
     print(f"    api={base}")
@@ -226,7 +206,7 @@ def run_smoke(scenarios: tuple[SmokeScenario, ...] | None = None) -> int:
 
         results: list[tuple[str, bool]] = []
         for scenario in selected:
-            ok = run_scenario(api, scenario)
+            ok = run_scenario(api, scenario, program_slug=slug)
             results.append((scenario.name, ok))
 
     print("==> Summary")
@@ -242,8 +222,13 @@ def run_smoke(scenarios: tuple[SmokeScenario, ...] | None = None) -> int:
     return 0
 
 
-def main() -> None:
-    sys.exit(run_smoke())
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Live multi-scenario smoke via agent API")
+    parser.add_argument(
+        "--program", type=str, default=None, help="Program slug (default: first in registry)"
+    )
+    args = parser.parse_args(argv)
+    sys.exit(run_smoke(program_slug=args.program))
 
 
 if __name__ == "__main__":

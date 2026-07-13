@@ -6,8 +6,8 @@
 **Effective:** October 1, 2025 - September 30, 2026
 **Ruleset id used by this POC:** `nc-fns-screening-2025-10`
 
-> **Dual copy:** The same gross monthly table is hard-coded for eligibility math in
-> `src/eligibility/ruleset.py` (`RULESET`). When changing numbers, dates, or the ruleset id,
+> **Dual copy:** The same gross monthly table is declared for eligibility math in
+> `programs/nc-fns/rules/2025-10.yaml`. When changing numbers, dates, or the ruleset id,
 > update that file and this doc together (see `AGENTS.md`). Public provenance is the URL above.
 
 ## Important caveats

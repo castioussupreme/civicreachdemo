@@ -40,7 +40,21 @@ def test_main_script_mode_exits_cleanly(tmp_path: Path) -> None:
     script.write_text("hello there\n", encoding="utf-8")
     api = MagicMock()
     api.health.return_value = {"status": "ok"}
-    api.create_session.return_value = ("sid1", "Welcome")
+    api.create_session.return_value = (
+        "sid1",
+        "Welcome",
+        {"program_slug": "nc-fns", "ruleset_id": "nc-fns-screening-2025-10"},
+    )
+    api.list_programs.return_value = [
+        {
+            "slug": "nc-fns",
+            "display_name": "NC FNS",
+            "ruleset_id": "nc-fns-screening-2025-10",
+            "effective_from": "2025-10-01",
+            "effective_to": "2026-09-30",
+            "search_aliases": [],
+        }
+    ]
     api.chat.return_value = {
         "session_id": "sid1",
         "reply": "hi",
@@ -51,7 +65,7 @@ def test_main_script_mode_exits_cleanly(tmp_path: Path) -> None:
         patch("src.cli.resolve_public_api_base", return_value="http://127.0.0.1:18080"),
         patch("src.cli.AgentApiClient", return_value=api),
     ):
-        main(["--script", str(script)])
+        main(["--script", str(script), "--program", "nc-fns"])
     api.close.assert_called()
 
 

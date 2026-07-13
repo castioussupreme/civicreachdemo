@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from src.programs.registry import get_program
 from src.session import SESSION_TTL_SECONDS, SessionStore, open_session_store
-from src.state.models import OPENING_MESSAGE, CaseField, EligibilityCase, FieldStatus, fresh_case
+from src.state.models import CaseField, EligibilityCase, FieldStatus, fresh_case
 
 
 def test_open_session_store() -> None:
@@ -35,7 +36,10 @@ def test_redis_round_trip() -> None:
         sid = store.create()
         case = store.get(sid)
         assert case.recent_turns
-        assert case.recent_turns[0].text == OPENING_MESSAGE
+        opening = get_program("nc-fns").opening_message
+        assert case.recent_turns[0].text == opening
+        assert case.program_slug == "nc-fns"
+        assert case.ruleset_id
         case.household_size = CaseField(status=FieldStatus.KNOWN, value=3)
         case.turn_count = 1
         store.set(sid, case)
@@ -47,7 +51,7 @@ def test_redis_round_trip() -> None:
         store.reset(sid)
         fresh = store.get(sid)
         assert fresh.household_size.value is None
-        assert fresh.recent_turns[0].text == OPENING_MESSAGE
+        assert fresh.recent_turns[0].text == opening
 
 
 def test_redis_get_missing_key_initializes() -> None:

@@ -24,10 +24,19 @@ def format_assessment_card(
     assessment: Assessment,
     *,
     citations: list[Citation] | None = None,
+    effective_from: str | None = None,
+    effective_to: str | None = None,
 ) -> str:
     """Human-facing screening card (plain language; no backend jargon)."""
     label = STATUS_LABELS.get(assessment.status, assessment.status.value)
     lines = [label, ""]
+
+    if effective_from:
+        if effective_to:
+            lines.append(f"Limits effective: {effective_from} - {effective_to}")
+        else:
+            lines.append(f"Limits effective from: {effective_from} (open-ended)")
+        lines.append("")
 
     facts: list[str] = []
     if assessment.household_size is not None:

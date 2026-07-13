@@ -1,0 +1,3 @@
+# Deployed program packs (slugs under programs/)
+programs:
+  - nc-fns

@@ -8,7 +8,7 @@ from pathlib import Path
 from src.eligibility.ruleset import RULESET
 
 ROOT = Path(__file__).resolve().parents[1]
-KNOWLEDGE = ROOT / "knowledge"
+KNOWLEDGE = ROOT / "programs" / "nc-fns" / "knowledge"
 
 
 def test_manifest_lists_expected_sources() -> None:

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from src.compose.response import is_terminal_assessment, should_append_disclaimer
 from src.limits import DEFAULT_MAX_MESSAGE_CHARS
+from src.programs.registry import get_program
 from src.state.models import (
-    OPENING_MESSAGE,
     Assessment,
     AssessmentStatus,
     EligibilityCase,
@@ -62,4 +62,5 @@ def test_fresh_case_has_opening() -> None:
     assert case.recent_turns[0].role == "assistant"
     assert "household" in case.recent_turns[0].text.lower()
     assert "income" in case.recent_turns[0].text.lower()
-    assert case.last_question == OPENING_MESSAGE
+    assert case.last_question == get_program("nc-fns").opening_message
+    assert case.program_slug == "nc-fns"

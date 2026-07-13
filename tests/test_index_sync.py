@@ -45,7 +45,12 @@ def test_sync_skips_unchanged_hash() -> None:
         patch("src.retrieval.index.load_corpus", return_value=(doc,)),
         patch("src.retrieval.index.source_hash_in_store", return_value=True),
         patch("src.retrieval.index.embed_texts") as embed,
-        patch("src.retrieval.index.list_indexed_source_ids", return_value={doc.id}),
+        patch(
+            "src.retrieval.index.list_indexed_source_ids",
+            return_value={doc.id},
+        ),
+        patch("src.retrieval.index.list_enabled_slugs", return_value=["nc-fns"]),
+        patch("src.retrieval.index.get_program"),
     ):
         gs.return_value.effective_qdrant_url.return_value = "http://localhost:6333"
         result = sync_knowledge_index()
@@ -72,14 +77,19 @@ def test_sync_reembeds_when_hash_missing() -> None:
         patch("src.retrieval.index.embed_texts", side_effect=_embed) as embed,
         patch("src.retrieval.index.delete_source") as delete,
         patch("src.retrieval.index.upsert_chunks") as upsert,
-        patch("src.retrieval.index.list_indexed_source_ids", return_value={doc.id}),
+        patch(
+            "src.retrieval.index.list_indexed_source_ids",
+            return_value={doc.id},
+        ),
+        patch("src.retrieval.index.list_enabled_slugs", return_value=["nc-fns"]),
+        patch("src.retrieval.index.get_program"),
     ):
         gs.return_value.effective_qdrant_url.return_value = "http://localhost:6333"
         result = sync_knowledge_index()
     assert result.reembedded == 1
     assert result.skipped == 0
     assert result.chunks_upserted == n
-    delete.assert_called_once_with(client, doc.id)
+    delete.assert_called_once()
     upsert.assert_called_once()
     embed.assert_called_once()
 
@@ -93,10 +103,16 @@ def test_sync_deletes_orphans() -> None:
         patch("src.retrieval.index.ensure_collection"),
         patch("src.retrieval.index.load_corpus", return_value=(doc,)),
         patch("src.retrieval.index.source_hash_in_store", return_value=True),
-        patch("src.retrieval.index.list_indexed_source_ids", return_value={doc.id, "gone-source"}),
+        patch(
+            "src.retrieval.index.list_indexed_source_ids",
+            return_value={doc.id, "gone-source"},
+        ),
         patch("src.retrieval.index.delete_source") as delete,
+        patch("src.retrieval.index.list_enabled_slugs", return_value=["nc-fns"]),
+        patch("src.retrieval.index.get_program"),
     ):
         gs.return_value.effective_qdrant_url.return_value = "http://localhost:6333"
         result = sync_knowledge_index()
     assert result.orphans_deleted == 1
-    delete.assert_called_with(client, "gone-source")
+    delete.assert_called()
+    assert delete.call_args.args[1] == "gone-source"

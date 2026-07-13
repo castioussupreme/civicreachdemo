@@ -23,8 +23,8 @@ from src.state.models import Assessment, AssessmentStatus
 console = Console()
 
 
-HELP = """[dim]NC FNS informal food-assistance screen — not official. No SSN needed.
-Talks to the running API (make up-d / make dev). Commands: /quit  /reset  /state  /why  /debug on|off[/dim]"""
+HELP = """[dim]Informal benefits screen — not official. Talks to the API (make up-d / make dev).
+Commands: /quit  /reset  /state  /why  /debug on|off  /program (new session)[/dim]"""
 
 
 def _str_list(value: JsonValue | None) -> list[str]:
@@ -119,17 +119,81 @@ def _print_assistant(
     *,
     assessment: Assessment | None = None,
     citations: list[Citation] | None = None,
+    effective_from: str | None = None,
+    effective_to: str | None = None,
 ) -> None:
     console.print()
     console.print(Panel(Markdown(text), title="Assistant", border_style="green"))
     if should_show_assessment_card(assessment) and assessment is not None:
         console.print(
             Panel(
-                format_assessment_card(assessment, citations=citations),
+                format_assessment_card(
+                    assessment,
+                    citations=citations,
+                    effective_from=effective_from,
+                    effective_to=effective_to,
+                ),
                 title="Screening summary",
                 border_style="cyan",
             )
         )
+
+
+def _pick_program(api: AgentApiClient, *, preselect: str | None = None) -> str:
+    """Type-to-narrow program picker (or preselect slug)."""
+    try:
+        catalog = api.list_programs(limit=50)
+    except AgentApiError as exc:
+        console.print(f"[red]{exc}[/red]")
+        sys.exit(1)
+    if not catalog:
+        console.print("[red]No active programs available for today.[/red]")
+        sys.exit(1)
+    if preselect:
+        for item in catalog:
+            if str(item.get("slug")) == preselect:
+                return preselect
+        console.print(f"[red]Program not found or inactive: {preselect}[/red]")
+        sys.exit(1)
+    if len(catalog) == 1:
+        slug = str(catalog[0].get("slug") or "")
+        console.print(f"[dim]Program:[/dim] {catalog[0].get('display_name')} ([bold]{slug}[/bold])")
+        return slug
+
+    console.print("[bold]Select a program[/bold] (type to filter, Enter to choose first match):")
+    query = ""
+    while True:
+        matches = [
+            p
+            for p in catalog
+            if not query
+            or query.lower() in str(p.get("display_name") or "").lower()
+            or query.lower() in str(p.get("slug") or "").lower()
+            or any(query.lower() in str(a).lower() for a in _str_list(p.get("search_aliases")))
+        ]
+        if not matches:
+            console.print("[dim]No matches — clear filter or try again.[/dim]")
+        else:
+            for i, p in enumerate(matches[:10], start=1):
+                eff = p.get("effective_to") or "open-ended"
+                console.print(
+                    f"  [cyan]{i}.[/cyan] {p.get('display_name')} "
+                    f"[dim]({p.get('slug')}) limits through {eff}[/dim]"
+                )
+        try:
+            raw = console.input("[bold]Filter / number>[/bold] ").strip()
+        except (EOFError, KeyboardInterrupt):
+            console.print("\nTake care.")
+            sys.exit(0)
+        if not raw:
+            if matches:
+                return str(matches[0].get("slug") or "")
+            continue
+        if raw.isdigit():
+            idx = int(raw)
+            if 1 <= idx <= min(10, len(matches)):
+                return str(matches[idx - 1].get("slug") or "")
+        query = raw
 
 
 def _print_why(api: AgentApiClient, session_id: str) -> None:
@@ -192,6 +256,12 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="API base URL (default: PUBLIC_BASE_URL from .env.runtime)",
     )
+    parser.add_argument(
+        "--program",
+        type=str,
+        default=None,
+        help="Program slug (skip interactive picker)",
+    )
     args = parser.parse_args(argv)
     configure_client_logging(verbose=args.verbose)
 
@@ -223,8 +293,9 @@ def main(argv: list[str] | None = None) -> None:
             console.print(f"[dim]Expected API at {base}[/dim]")
             sys.exit(1)
 
+        program_slug = _pick_program(api, preselect=(args.program or "").strip() or None)
         try:
-            sid, opening = api.create_session()
+            sid, opening, session_meta = api.create_session(program_slug=program_slug)
         except AgentApiError as exc:
             console.print(f"[red]{exc}[/red]")
             sys.exit(1)
@@ -232,6 +303,10 @@ def main(argv: list[str] | None = None) -> None:
         console.print(HELP)
         meta = Table.grid(padding=(0, 2))
         meta.add_row("[dim]session[/dim]", f"[dim]{sid}[/dim]")
+        meta.add_row(
+            "[dim]program[/dim]", f"[dim]{session_meta.get('program_slug') or program_slug}[/dim]"
+        )
+        meta.add_row("[dim]ruleset[/dim]", f"[dim]{session_meta.get('ruleset_id') or ''}[/dim]")
         meta.add_row("[dim]api[/dim]", f"[dim]{base}[/dim]")
         console.print(meta)
 
@@ -254,13 +329,24 @@ def main(argv: list[str] | None = None) -> None:
             if user.lower() in {"/quit", "/exit", "quit", "exit"}:
                 console.print("Take care.")
                 break
-            if user.lower() == "/reset":
+            if user.lower() in {"/program", "/programs"}:
+                program_slug = _pick_program(api)
                 try:
-                    sid, opening = api.reset(sid)
+                    sid, opening, session_meta = api.create_session(program_slug=program_slug)
                 except AgentApiError as exc:
                     console.print(f"[red]{exc}[/red]")
                     continue
-                console.print("[green]Starting fresh.[/green]")
+                console.print("[green]New session for selected program.[/green]")
+                if opening:
+                    _print_assistant(opening)
+                continue
+            if user.lower() == "/reset":
+                try:
+                    sid, opening, _sm = api.reset(sid, program_slug=program_slug)
+                except AgentApiError as exc:
+                    console.print(f"[red]{exc}[/red]")
+                    continue
+                console.print("[green]Starting fresh (same program).[/green]")
                 if opening:
                     _print_assistant(opening)
                 continue

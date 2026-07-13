@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from src.eligibility.income import normalize_to_monthly
 from src.eligibility.ruleset import RULESET
+from src.programs.registry import get_ruleset_by_id
 from src.state.models import EligibilityCase, FieldStatus, Stage
 
 
@@ -93,7 +94,13 @@ def _stated_monthly(case: EligibilityCase) -> float | None:
 def _threshold(case: EligibilityCase) -> float | None:
     if not case.household_size.is_usable() or case.household_size.value is None:
         return None
-    return RULESET.threshold_for_household(int(case.household_size.value))
+    ruleset = RULESET
+    if case.program_slug and case.ruleset_id:
+        try:
+            ruleset = get_ruleset_by_id(case.program_slug, case.ruleset_id)
+        except Exception:
+            ruleset = RULESET
+    return ruleset.threshold_for_household(int(case.household_size.value))
 
 
 def _stated_monthly_exceeds_threshold(case: EligibilityCase) -> bool:

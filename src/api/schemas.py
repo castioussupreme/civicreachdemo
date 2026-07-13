@@ -10,15 +10,35 @@ class HealthResponse(BaseModel):
     service: str
     openai_model: str
     ruleset_id: str
+    default_program: str
+    active_programs: int
     public_base_url: str
     endpoints: dict[str, str]
     resources: dict[str, str]
 
 
+class ProgramCatalogItem(BaseModel):
+    slug: str
+    display_name: str
+    ruleset_id: str
+    effective_from: str
+    effective_to: str | None = None
+    search_aliases: list[str] = Field(default_factory=list)
+
+
+class SessionCreateRequest(BaseModel):
+    program_slug: str | None = None
+    as_of: str | None = None  # ISO date YYYY-MM-DD
+
+
 class SessionCreateResponse(BaseModel):
     session_id: str
-    # First assistant line so clients can show it without an empty first turn
     opening_message: str
+    program_slug: str
+    ruleset_id: str
+    as_of: str
+    ruleset_effective_from: str | None = None
+    ruleset_effective_to: str | None = None
 
 
 class ChatRequest(BaseModel):
@@ -33,10 +53,10 @@ class ChatResponse(BaseModel):
     safety_action: str
     stage: str
     assessment_status: str | None = None
-    # Full assessment for clients (e.g. CLI /why card); null while still collecting
     assessment: dict[str, object] | None = None
-    # Human-facing title + URL (no internal source ids)
     citations: list[dict[str, str]] = Field(default_factory=list)
+    program_slug: str | None = None
+    ruleset_id: str | None = None
     debug: dict[str, object] | None = None
 
 
@@ -45,3 +65,5 @@ class StateResponse(BaseModel):
     state: dict[str, object]
     assessment: dict[str, object] | None = None
     citations: list[dict[str, str]] = Field(default_factory=list)
+    program_slug: str | None = None
+    ruleset_id: str | None = None

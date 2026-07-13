@@ -95,9 +95,11 @@ def test_retrieve_by_source_ids_prefers_listed() -> None:
         _client: object,
         _vector: list[float],
         *,
+        program_slug: str = "",
         limit: int = 3,
         source_ids: list[str] | None = None,
     ) -> list[StoredChunk]:
+        assert program_slug  # mandatory pre-filter
         if source_ids:
             return preferred
         return open_hits

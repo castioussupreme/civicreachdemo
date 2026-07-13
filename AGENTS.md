@@ -8,15 +8,23 @@ POC NC FNS informal screening agent. Prefer small, correct changes over new infr
 - **Hybrid control:** LLM extracts language and composes replies; **code** owns safety, case state, planner, and eligibility math.
 - **RAG is citations only:** retrieval must not invent dollar thresholds. Thresholds come from `RULESET` in code.
 
-## Dual copy of income thresholds (intentional)
+## Program packs
 
-Eligibility **math** lives in Python; the **public table** also lives in curated markdown for RAG and human reading.
+- Policy data lives under `programs/{slug}/` (rules YAML, knowledge, smoke).
+- **`src/` is program-agnostic** infrastructure (pipeline, API, Qdrant, registry).
+- Registry: `programs/registry.yaml`. Default slug is first listed pack.
+- Sessions pin `program_slug` + `ruleset_id` at create; do not switch program mid-session.
+- Qdrant: one collection; every retrieve **pre-filters** by `program_slug` (never post-filter).
+
+## Dual copy of income thresholds (intentional, per pack)
+
+For **nc-fns**, eligibility **math** is `programs/nc-fns/rules/*.yaml`; the **public table** is curated markdown for RAG.
 
 | Role                                | Path                                                                |
 | ----------------------------------- | ------------------------------------------------------------------- |
-| Code (authoritative for assessment) | `src/eligibility/ruleset.py` → `RULESET`                            |
-| Knowledge (RAG / display table)     | `knowledge/nc-fns-income-limits.md`                                 |
-| Manifest metadata                   | `knowledge/manifest.json` entry `nc-fns-income-limits`              |
+| Rules (authoritative for assessment) | `programs/nc-fns/rules/2025-10.yaml` (and future FY files)          |
+| Knowledge (RAG / display table)     | `programs/nc-fns/knowledge/nc-fns-income-limits.md`                 |
+| Manifest metadata                   | `programs/nc-fns/knowledge/manifest.json` entry `nc-fns-income-limits` |
 | Soft CI guard                       | `tests/test_knowledge.py` (`test_income_doc_matches_ruleset_table`) |
 
 **Public provenance (both copies must stay aligned with this source):**
@@ -31,20 +39,16 @@ Eligibility **math** lives in Python; the **public table** also lives in curated
 
 Update **all** of these in the same change:
 
-1. `src/eligibility/ruleset.py` (`RULESET`: table, `additional_member_increment`, `effective_from` / `effective_to`, `id`, `source_id`, description)
-2. `knowledge/nc-fns-income-limits.md` (table, effective dates, ruleset id line)
-3. `knowledge/manifest.json` (`nc-fns-income-limits` `effective_from` / `effective_to` / notes if needed)
-4. Smoke/fixtures that hardcode thresholds (e.g. `src/smoke.py` `EXPECTED_THRESHOLD` for household size 2) — prefer deriving from `RULESET` when practical
+1. `programs/nc-fns/rules/YYYY-MM.yaml` (table, dates, id, source_id, description)
+2. `programs/nc-fns/knowledge/nc-fns-income-limits.md` (table, effective dates, ruleset id line)
+3. `programs/nc-fns/knowledge/manifest.json` effective dates / notes if needed
+4. Pack smoke expectations under `programs/nc-fns/smoke/` when needed
 5. Run `make test` (includes the knowledge/ruleset spot-check)
-
-Do **not** introduce a third runtime source (CSV/JSON loader, parse-markdown-at-boot) unless a human explicitly asks. Documented dual copy + agent discipline is the chosen POC tradeoff.
 
 ### Comments in code and knowledge
 
-Keep cross-references in place:
-
-- `ruleset.py` must cite the public URL **and** `knowledge/nc-fns-income-limits.md`
-- `nc-fns-income-limits.md` must cite the public URL **and** `src/eligibility/ruleset.py`
+- Rules YAML must stay dual-copied with the income-limits knowledge doc
+- `nc-fns-income-limits.md` must cite the public URL **and** the rules YAML path
 
 ## Other mirrored facts (lighter sync)
 

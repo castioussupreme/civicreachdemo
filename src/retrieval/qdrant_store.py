@@ -1,4 +1,4 @@
-"""Qdrant client helpers for the NC FNS knowledge collection."""
+"""Qdrant client helpers — one collection, pre-filter by program_slug."""
 
 from __future__ import annotations
 
@@ -15,7 +15,8 @@ from src.retrieval.embeddings import EMBEDDING_DIM
 
 logger = logging.getLogger(__name__)
 
-COLLECTION = "nc_fns_kb"
+# Shared multi-program collection (logical shard via program_slug payload)
+COLLECTION = "kb_programs"
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class StoredChunk:
     content_hash: str
     chunk_index: int
     score: float
+    program_slug: str = ""
     effective_from: str | None = None
     effective_to: str | None = None
 
@@ -58,6 +60,7 @@ def ensure_collection(client: QdrantClient, *, vector_size: int = EMBEDDING_DIM)
                 )
                 client.delete_collection(COLLECTION)
             else:
+                _ensure_payload_indexes(client)
                 return
         except Exception:
             logger.exception("Could not inspect collection %s; recreating", COLLECTION)
@@ -67,13 +70,17 @@ def ensure_collection(client: QdrantClient, *, vector_size: int = EMBEDDING_DIM)
         collection_name=COLLECTION,
         vectors_config=qm.VectorParams(size=vector_size, distance=qm.Distance.COSINE),
     )
-    # Payload index for source_id filters
-    with suppress(Exception):
-        client.create_payload_index(
-            collection_name=COLLECTION,
-            field_name="source_id",
-            field_schema=qm.PayloadSchemaType.KEYWORD,
-        )
+    _ensure_payload_indexes(client)
+
+
+def _ensure_payload_indexes(client: QdrantClient) -> None:
+    for field in ("source_id", "program_slug"):
+        with suppress(Exception):
+            client.create_payload_index(
+                collection_name=COLLECTION,
+                field_name=field,
+                field_schema=qm.PayloadSchemaType.KEYWORD,
+            )
 
 
 def content_hash(source_id: str, text: str) -> str:
@@ -81,12 +88,19 @@ def content_hash(source_id: str, text: str) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def source_hash_in_store(client: QdrantClient, source_id: str, expected_hash: str) -> bool:
+def source_hash_in_store(
+    client: QdrantClient,
+    source_id: str,
+    expected_hash: str,
+    *,
+    program_slug: str,
+) -> bool:
     """True if any point for source_id already has this content_hash (doc unchanged)."""
     points, _ = client.scroll(
         collection_name=COLLECTION,
         scroll_filter=qm.Filter(
             must=[
+                qm.FieldCondition(key="program_slug", match=qm.MatchValue(value=program_slug)),
                 qm.FieldCondition(key="source_id", match=qm.MatchValue(value=source_id)),
                 qm.FieldCondition(key="content_hash", match=qm.MatchValue(value=expected_hash)),
             ]
@@ -98,23 +112,31 @@ def source_hash_in_store(client: QdrantClient, source_id: str, expected_hash: st
     return len(points) > 0
 
 
-def delete_source(client: QdrantClient, source_id: str) -> None:
+def delete_source(client: QdrantClient, source_id: str, *, program_slug: str) -> None:
     client.delete(
         collection_name=COLLECTION,
         points_selector=qm.FilterSelector(
             filter=qm.Filter(
-                must=[qm.FieldCondition(key="source_id", match=qm.MatchValue(value=source_id))]
+                must=[
+                    qm.FieldCondition(key="program_slug", match=qm.MatchValue(value=program_slug)),
+                    qm.FieldCondition(key="source_id", match=qm.MatchValue(value=source_id)),
+                ]
             )
         ),
     )
 
 
-def list_indexed_source_ids(client: QdrantClient) -> set[str]:
+def list_indexed_source_ids(client: QdrantClient, *, program_slug: str) -> set[str]:
     ids: set[str] = set()
     next_offset: object | None = None
     while True:
         points, next_offset = client.scroll(
             collection_name=COLLECTION,
+            scroll_filter=qm.Filter(
+                must=[
+                    qm.FieldCondition(key="program_slug", match=qm.MatchValue(value=program_slug))
+                ]
+            ),
             limit=100,
             offset=next_offset,
             with_payload=["source_id"],
@@ -131,6 +153,7 @@ def list_indexed_source_ids(client: QdrantClient) -> set[str]:
 def upsert_chunks(
     client: QdrantClient,
     *,
+    program_slug: str,
     source_id: str,
     title: str,
     url: str | None,
@@ -141,16 +164,22 @@ def upsert_chunks(
     chunks: list[tuple[int, str, list[float]]],
 ) -> None:
     """chunks: list of (chunk_index, text, vector)."""
+    if not program_slug:
+        raise ValueError("program_slug is required for upsert_chunks")
     points: list[qm.PointStruct] = []
     for chunk_index, text, vector in chunks:
         point_id = str(
-            uuid.uuid5(uuid.NAMESPACE_URL, f"{source_id}:{chunk_index}:{content_hash_value}")
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"{program_slug}:{source_id}:{chunk_index}:{content_hash_value}",
+            )
         )
         points.append(
             qm.PointStruct(
                 id=point_id,
                 vector=vector,
                 payload={
+                    "program_slug": program_slug,
                     "source_id": source_id,
                     "title": title,
                     "url": url,
@@ -171,20 +200,28 @@ def search(
     client: QdrantClient,
     vector: list[float],
     *,
+    program_slug: str,
     limit: int = 3,
     source_ids: list[str] | None = None,
 ) -> list[StoredChunk]:
-    query_filter: qm.Filter | None = None
+    """
+    Vector search with mandatory program_slug pre-filter (not post-filter).
+
+    Never searches across programs.
+    """
+    if not program_slug:
+        raise ValueError("program_slug is required for search (pre-filter isolation)")
+    must: list[qm.Condition] = [
+        qm.FieldCondition(key="program_slug", match=qm.MatchValue(value=program_slug)),
+    ]
     if source_ids:
-        query_filter = qm.Filter(
-            must=[
-                qm.FieldCondition(
-                    key="source_id",
-                    match=qm.MatchAny(any=source_ids),
-                )
-            ]
+        must.append(
+            qm.FieldCondition(
+                key="source_id",
+                match=qm.MatchAny(any=source_ids),
+            )
         )
-    # qdrant-client >=1.12 uses query_points (search removed)
+    query_filter = qm.Filter(must=must)
     result = client.query_points(
         collection_name=COLLECTION,
         query=vector,
@@ -204,6 +241,7 @@ def search(
                 content_hash=str(payload.get("content_hash", "")),
                 chunk_index=int(payload.get("chunk_index") or 0),
                 score=float(h.score or 0.0),
+                program_slug=str(payload.get("program_slug") or program_slug),
                 effective_from=(
                     payload.get("effective_from")
                     if isinstance(payload.get("effective_from"), str)

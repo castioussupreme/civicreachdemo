@@ -155,12 +155,13 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
     citations: list[Citation] = []
     policy_context = None
 
+    program_slug = case.program_slug or "nc-fns"
     intents = extraction.get("user_intents") or []
     if "policy_question" in intents or extraction.get("policy_question"):
         q = extraction.get("policy_question") or working_message
-        citations = retrieve(q, limit=2)
+        citations = retrieve(q, limit=2, program_slug=program_slug)
         if citations:
-            doc = get_by_id(citations[0].source_id)
+            doc = get_by_id(citations[0].source_id, program_slug=program_slug)
             # Plain context for compose — no markdown report framing
             policy_context = (
                 f"From public source “{citations[0].title}”: "
@@ -176,6 +177,7 @@ def process_turn(message: str, case: EligibilityCase) -> TurnResult:
             assessment.source_ids,
             user_query=working_message,
             limit=3,
+            program_slug=program_slug,
         )
 
     try:

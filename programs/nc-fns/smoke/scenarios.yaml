@@ -1,0 +1,33 @@
+# Thresholds resolved from the program ruleset at smoke time when null.
+scenarios:
+  - name: happy
+    script: happy.txt
+    expect_status: likely_eligible
+    expect_household: 2
+    expect_monthly: 3000.0
+    expect_threshold: null  # RULESET size 2
+  - name: net
+    script: net.txt
+    expect_status: unable_to_determine
+    expect_household: 1
+    expect_monthly: 2000.0
+    expect_threshold: null  # size 1
+  - name: individual
+    script: individual.txt
+    expect_status: unable_to_determine
+    expect_household: 3
+    expect_monthly: 2000.0
+    expect_threshold: null  # size 3
+  - name: student
+    script: student.txt
+    expect_status: unable_to_determine
+    expect_household: 1
+    expect_monthly: 1500.0
+    expect_threshold: null
+  - name: injection
+    script: injection.txt
+    expect_status: likely_ineligible
+    expect_household: 1
+    expect_monthly: 9000.0
+    expect_threshold: null
+    reject_status: likely_eligible
